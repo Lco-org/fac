@@ -5,6 +5,7 @@ import (
 	"cso-erp/internal/database"
 	"cso-erp/internal/handlers"
 	"cso-erp/internal/middleware"
+	"cso-erp/internal/models"
 	"cso-erp/internal/services"
 	"log"
 	"os"
@@ -30,11 +31,15 @@ func main() {
 
 	// Initialize services
 	authService := services.NewAuthService(db, cfg)
+	userService := services.NewUserService(db, cfg)
+	containerService := services.NewContainerService(db)
 	transactionService := services.NewTransactionService(db)
 	reportService := services.NewReportService(db)
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authService, cfg)
+	userHandler := handlers.NewUserHandler(userService)
+	containerHandler := handlers.NewContainerHandler(containerService)
 	transactionHandler := handlers.NewTransactionHandler(transactionService)
 	reportHandler := handlers.NewReportHandler(reportService)
 
@@ -53,7 +58,7 @@ func main() {
 		AllowOrigins:     cfg.CORS.Origin,
 		AllowCredentials: cfg.CORS.Credentials,
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
-		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS",
+		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS, PATCH",
 	}))
 
 	// Health check
@@ -79,6 +84,23 @@ func main() {
 	// User routes
 	users := protected.Group("/users")
 	users.Get("/me", authHandler.GetCurrentUser)
+
+	// Admin-only user management routes
+	adminUsers := protected.Group("/users", middleware.RequireRole(models.RoleAdmin))
+	adminUsers.Get("", userHandler.ListUsers)
+	adminUsers.Post("", userHandler.CreateUser)
+	adminUsers.Get("/:id", userHandler.GetUser)
+	adminUsers.Put("/:id", userHandler.UpdateUser)
+	adminUsers.Delete("/:id", userHandler.DeleteUser)
+	adminUsers.Patch("/:id/role", userHandler.UpdateUserRole)
+
+	// Admin-only container management routes
+	containers := protected.Group("/containers", middleware.RequireRole(models.RoleAdmin))
+	containers.Get("", containerHandler.ListContainers)
+	containers.Post("", containerHandler.CreateContainer)
+	containers.Get("/:id", containerHandler.GetContainer)
+	containers.Put("/:id", containerHandler.UpdateContainer)
+	containers.Delete("/:id", containerHandler.DeleteContainer)
 
 	// Transaction routes (Finance & Admin can create, only Admin can delete)
 	transactions := protected.Group("/transactions")

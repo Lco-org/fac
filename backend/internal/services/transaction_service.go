@@ -21,10 +21,7 @@ func NewTransactionService(db *database.DB) *TransactionService {
 }
 
 var (
-	ErrInsufficientBalance = errors.New("insufficient balance")
-	ErrContainerNotFound   = errors.New("container not found")
-	ErrProjectNotFound     = errors.New("project not found")
-	ErrInvalidAmount       = errors.New("invalid amount")
+// Specific transaction errors can remain here if needed
 )
 
 // CreateTransaction handles the complete transaction creation with deficit handling

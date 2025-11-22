@@ -1,0 +1,427 @@
+<template>
+  <div class="space-y-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+      <div>
+        <h1 class="text-2xl font-bold text-gray-900">إدارة الحسابات المصرفية</h1>
+        <p class="mt-1 text-sm text-gray-500">إدارة الصناديق النقدية والحسابات المصرفية</p>
+      </div>
+      <button
+        @click="openCreateModal"
+        class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+      >
+        <PlusIcon class="-mr-1 ml-2 h-5 w-5" aria-hidden="true" />
+        حساب جديد
+      </button>
+    </div>
+
+    <!-- Containers List -->
+    <div class="bg-white shadow overflow-hidden sm:rounded-lg">
+      <ul role="list" class="divide-y divide-gray-200">
+        <li v-for="container in containers" :key="container.id" class="px-4 py-4 sm:px-6 hover:bg-gray-50">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center min-w-0">
+              <div class="flex-shrink-0">
+                <span class="inline-flex items-center justify-center h-10 w-10 rounded-full bg-primary-100">
+                  <BanknotesIcon v-if="container.type === 'cash'" class="h-6 w-6 text-primary-600" />
+                  <BuildingLibraryIcon v-else class="h-6 w-6 text-primary-600" />
+                </span>
+              </div>
+              <div class="mr-4 truncate">
+                <div class="flex items-center">
+                  <p class="text-sm font-medium text-primary-600 truncate">{{ container.name }}</p>
+                  <span
+                    :class="[
+                      container.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800',
+                      'mr-2 px-2 inline-flex text-xs leading-5 font-semibold rounded-full'
+                    ]"
+                  >
+                    {{ container.is_active ? 'نشط' : 'غير نشط' }}
+                  </span>
+                </div>
+                <div class="flex items-center text-sm text-gray-500 mt-1">
+                  <span class="truncate">{{ container.type === 'cash' ? 'صندوق نقدي' : 'حساب مصرفي' }}</span>
+                  <span class="mx-2">•</span>
+                  <span class="truncate">{{ container.currency }}</span>
+                  <span class="mx-2">•</span>
+                  <span class="font-medium text-gray-900">{{ formatCurrency(container.balance, container.currency) }}</span>
+                </div>
+                <div v-if="container.type === 'bank'" class="text-xs text-gray-400 mt-1">
+                  {{ container.bank_name }} - {{ container.account_number }}
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center space-x-2 space-x-reverse">
+              <button
+                @click="openEditModal(container)"
+                class="p-2 text-gray-400 hover:text-gray-500"
+                title="تعديل"
+              >
+                <PencilIcon class="h-5 w-5" aria-hidden="true" />
+              </button>
+              <template v-if="authStore.canDelete">
+                <button
+                  @click="toggleActive(container)"
+                  :class="[
+                    container.is_active ? 'text-yellow-500 hover:text-yellow-600' : 'text-green-500 hover:text-green-600',
+                    'p-2'
+                  ]"
+                  :title="container.is_active ? 'تعطيل' : 'تنشيط'"
+                >
+                  <NoSymbolIcon v-if="container.is_active" class="h-5 w-5" aria-hidden="true" />
+                  <CheckCircleIcon v-else class="h-5 w-5" aria-hidden="true" />
+                </button>
+                <button
+                  @click="confirmDelete(container)"
+                  class="p-2 text-red-400 hover:text-red-500"
+                  title="حذف نهائي"
+                >
+                  <TrashIcon class="h-5 w-5" aria-hidden="true" />
+                </button>
+              </template>
+            </div>
+          </div>
+        </li>
+      </ul>
+      <div v-if="containers.length === 0" class="text-center py-12">
+        <BuildingLibraryIcon class="mx-auto h-12 w-12 text-gray-400" />
+        <h3 class="mt-2 text-sm font-medium text-gray-900">لا يوجد حسابات</h3>
+        <p class="mt-1 text-sm text-gray-500">ابدأ بإضافة حساب مصرفي أو صندوق نقدي جديد.</p>
+      </div>
+    </div>
+
+    <!-- Create/Edit Modal -->
+    <TransitionRoot as="template" :show="isModalOpen">
+      <Dialog as="div" class="relative z-10" @close="closeModal">
+        <TransitionChild
+          as="template"
+          enter="ease-out duration-300"
+          enter-from="opacity-0"
+          enter-to="opacity-100"
+          leave="ease-in duration-200"
+          leave-from="opacity-100"
+          leave-to="opacity-0"
+        >
+          <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
+        </TransitionChild>
+
+        <div class="fixed inset-0 z-10 overflow-y-auto">
+          <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+            <TransitionChild
+              as="template"
+              enter="ease-out duration-300"
+              enter-from="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+              enter-to="opacity-100 translate-y-0 sm:scale-100"
+              leave="ease-in duration-200"
+              leave-from="opacity-100 translate-y-0 sm:scale-100"
+              leave-to="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+            >
+              <DialogPanel class="relative transform overflow-hidden rounded-lg bg-white px-4 pt-5 pb-4 text-right shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
+                <div class="absolute top-0 left-0 hidden pt-4 pl-4 sm:block">
+                  <button
+                    type="button"
+                    class="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+                    @click="closeModal"
+                  >
+                    <span class="sr-only">إغلاق</span>
+                    <XMarkIcon class="h-6 w-6" aria-hidden="true" />
+                  </button>
+                </div>
+                <div class="sm:flex sm:items-start">
+                  <div class="mt-3 text-center sm:mt-0 sm:mr-4 sm:text-right w-full">
+                    <DialogTitle as="h3" class="text-lg font-medium leading-6 text-gray-900">
+                      {{ isEditing ? 'تعديل حساب' : 'حساب جديد' }}
+                    </DialogTitle>
+                    <div class="mt-4 space-y-4">
+                      <!-- Name -->
+                      <div>
+                        <label for="name" class="block text-sm font-medium text-gray-700">اسم الحساب</label>
+                        <div class="mt-1">
+                          <input
+                            type="text"
+                            name="name"
+                            id="name"
+                            v-model="form.name"
+                            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                          />
+                        </div>
+                      </div>
+
+                      <!-- Name AR -->
+                      <div>
+                        <label for="name_ar" class="block text-sm font-medium text-gray-700">اسم الحساب (عربي)</label>
+                        <div class="mt-1">
+                          <input
+                            type="text"
+                            name="name_ar"
+                            id="name_ar"
+                            v-model="form.name_ar"
+                            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                          />
+                        </div>
+                      </div>
+
+                      <!-- Type -->
+                      <div>
+                        <label for="type" class="block text-sm font-medium text-gray-700">النوع</label>
+                        <div class="mt-1">
+                          <select
+                            id="type"
+                            name="type"
+                            v-model="form.type"
+                            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                          >
+                            <option value="cash">صندوق نقدي</option>
+                            <option value="bank">حساب مصرفي</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <!-- Currency -->
+                      <div>
+                        <label for="currency" class="block text-sm font-medium text-gray-700">العملة</label>
+                        <div class="mt-1">
+                          <select
+                            id="currency"
+                            name="currency"
+                            v-model="form.currency"
+                            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                          >
+                            <option value="LYD">دينار ليبي (LYD)</option>
+                            <option value="USD">دولار أمريكي (USD)</option>
+                            <option value="EUR">يورو (EUR)</option>
+                            <option value="GBP">جنيه إسترليني (GBP)</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <!-- Bank Details (Only if Type is Bank) -->
+                      <div v-if="form.type === 'bank'" class="space-y-4 border-t border-gray-200 pt-4 mt-4">
+                        <h4 class="text-sm font-medium text-gray-900">بيانات البنك</h4>
+                        
+                        <div>
+                          <label for="bank_name" class="block text-sm font-medium text-gray-700">اسم البنك</label>
+                          <div class="mt-1">
+                            <input
+                              type="text"
+                              name="bank_name"
+                              id="bank_name"
+                              v-model="form.bank_name"
+                              class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label for="account_number" class="block text-sm font-medium text-gray-700">رقم الحساب</label>
+                          <div class="mt-1">
+                            <input
+                              type="text"
+                              name="account_number"
+                              id="account_number"
+                              v-model="form.account_number"
+                              class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label for="iban" class="block text-sm font-medium text-gray-700">IBAN</label>
+                          <div class="mt-1">
+                            <input
+                              type="text"
+                              name="iban"
+                              id="iban"
+                              v-model="form.iban"
+                              class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                            />
+                          </div>
+                        </div>
+
+                        <div>
+                          <label for="swift_code" class="block text-sm font-medium text-gray-700">Swift Code</label>
+                          <div class="mt-1">
+                            <input
+                              type="text"
+                              name="swift_code"
+                              id="swift_code"
+                              v-model="form.swift_code"
+                              class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      <!-- Active Status (Edit Only) -->
+                      <div v-if="isEditing" class="flex items-center pt-4">
+                        <input
+                          id="is_active"
+                          name="is_active"
+                          type="checkbox"
+                          v-model="form.is_active"
+                          class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                        />
+                        <label for="is_active" class="mr-2 block text-sm text-gray-900">حساب نشط</label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+                  <button
+                    type="button"
+                    class="inline-flex w-full justify-center rounded-md border border-transparent bg-primary-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 sm:ml-3 sm:w-auto sm:text-sm"
+                    @click="saveContainer"
+                    :disabled="loading"
+                  >
+                    {{ loading ? 'جاري الحفظ...' : 'حفظ' }}
+                  </button>
+                  <button
+                    type="button"
+                    class="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 sm:mt-0 sm:w-auto sm:text-sm"
+                    @click="closeModal"
+                  >
+                    إلغاء
+                  </button>
+                </div>
+              </DialogPanel>
+            </TransitionChild>
+          </div>
+        </div>
+      </Dialog>
+    </TransitionRoot>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted } from 'vue'
+import { Dialog, DialogPanel, DialogTitle, TransitionChild, TransitionRoot } from '@headlessui/vue'
+import { PlusIcon, PencilIcon, TrashIcon, XMarkIcon, BanknotesIcon, BuildingLibraryIcon, NoSymbolIcon, CheckCircleIcon } from '@heroicons/vue/24/outline'
+import api from '@/api'
+import { useAuthStore } from '@/stores/auth'
+
+const authStore = useAuthStore()
+const containers = ref([])
+const isModalOpen = ref(false)
+const isEditing = ref(false)
+const loading = ref(false)
+
+const form = ref({
+  id: null,
+  name: '',
+  name_ar: '',
+  type: 'cash',
+  currency: 'LYD',
+  balance: 0,
+  bank_name: '',
+  account_number: '',
+  iban: '',
+  swift_code: '',
+  is_active: true
+})
+
+const fetchContainers = async () => {
+  try {
+    const response = await api.get('/containers')
+    containers.value = response.data
+  } catch (error) {
+    console.error('Failed to fetch containers:', error)
+  }
+}
+
+const openCreateModal = () => {
+  isEditing.value = false
+  form.value = {
+    id: null,
+    name: '',
+    name_ar: '',
+    type: 'cash',
+    currency: 'LYD',
+    balance: 0,
+    bank_name: '',
+    account_number: '',
+    iban: '',
+    swift_code: '',
+    is_active: true
+  }
+  isModalOpen.value = true
+}
+
+const openEditModal = (container) => {
+  isEditing.value = true
+  form.value = {
+    id: container.id,
+    name: container.name,
+    name_ar: container.name_ar,
+    type: container.type,
+    currency: container.currency,
+    balance: container.balance,
+    bank_name: container.bank_name || '',
+    account_number: container.account_number || '',
+    iban: container.iban || '',
+    swift_code: container.swift_code || '',
+    is_active: container.is_active
+  }
+  isModalOpen.value = true
+}
+
+const closeModal = () => {
+  isModalOpen.value = false
+}
+
+const saveContainer = async () => {
+  loading.value = true
+  try {
+    if (isEditing.value) {
+      await api.put(`/containers/${form.value.id}`, form.value)
+    } else {
+      await api.post('/containers', form.value)
+    }
+    await fetchContainers()
+    closeModal()
+  } catch (error) {
+    console.error('Failed to save container:', error)
+    alert('حدث خطأ أثناء حفظ البيانات')
+  } finally {
+    loading.value = false
+  }
+}
+
+const toggleActive = async (container) => {
+  const action = container.is_active ? 'تعطيل' : 'تنشيط'
+  if (confirm(`هل أنت متأكد من ${action} الحساب ${container.name}؟`)) {
+    try {
+      await api.put(`/containers/${container.id}`, {
+        ...container,
+        is_active: !container.is_active
+      })
+      await fetchContainers()
+    } catch (error) {
+      console.error('Failed to toggle container status:', error)
+      alert('حدث خطأ أثناء تغيير حالة الحساب')
+    }
+  }
+}
+
+const confirmDelete = async (container) => {
+  if (confirm(`هل أنت متأكد من حذف الحساب ${container.name} نهائياً؟ لا يمكن التراجع عن هذا الإجراء.`)) {
+    try {
+      await api.delete(`/containers/${container.id}`)
+      await fetchContainers()
+    } catch (error) {
+      console.error('Failed to delete container:', error)
+      alert(error.response?.data?.error || 'حدث خطأ أثناء حذف الحساب')
+    }
+  }
+}
+
+const formatCurrency = (amount, currency) => {
+  return new Intl.NumberFormat('ar-LY', {
+    style: 'currency',
+    currency: currency
+  }).format(amount)
+}
+
+onMounted(() => {
+  fetchContainers()
+})
+</script>

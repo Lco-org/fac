@@ -158,6 +158,13 @@ type CreateUserRequest struct {
 	Role       UserRole `json:"role"`
 }
 
+type UpdateUserRequest struct {
+	Email      *string `json:"email,omitempty"`
+	FullName   *string `json:"full_name,omitempty"`
+	FullNameAr *string `json:"full_name_ar,omitempty"`
+	IsActive   *bool   `json:"is_active,omitempty"`
+}
+
 type CreateTransactionRequest struct {
 	Type            TransactionType `json:"type"`
 	Amount          float64         `json:"amount"`

@@ -55,6 +55,20 @@ const routes = [
                 meta: { requiresRole: ['admin', 'finance'] },
             },
             {
+                path: 'admin/users',
+                name: 'Users',
+                component: () => import('@/views/admin/UsersView.vue'),
+                meta: { requiresRole: ['admin'] },
+            },
+            {
+                path: 'admin/containers',
+                name: 'Containers',
+                component: () => import('@/views/admin/ContainersView.vue'),
+                meta: { requiresRole: ['admin'] },
+            },
+
+
+            {
                 path: 'reports/daily-position',
                 name: 'DailyPosition',
                 component: () => import('@/views/reports/DailyPositionView.vue'),

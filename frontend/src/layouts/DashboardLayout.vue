@@ -17,7 +17,17 @@ const menuItems = computed(() => {
       roles: ['admin', 'finance', 'auditor'],
     },
     {
+      title: 'الإدارة',
+      icon: '⚙️',
+      roles: ['admin'],
+      children: [
+        { title: 'المستخدمين', path: '/admin/users' },
+        { title: 'الحسابات المصرفية', path: '/admin/containers' },
+      ],
+    },
+    {
       title: 'المقبوضات',
+
       icon: '💰',
       roles: ['admin', 'finance'],
       children: [
