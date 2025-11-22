@@ -17,7 +17,9 @@ onMounted(async () => {
 })
 
 const formatCurrency = (amount, currency) => {
-  return `${amount.toFixed(2)} ${currency}`
+  // Use Western numerals (123456) with comma separators
+  const formatted = Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return `${formatted} ${currency}`
 }
 
 const getBalanceClass = (balance) => {

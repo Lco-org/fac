@@ -243,3 +243,192 @@ type DeficitContainer struct {
 	FirstDeficitDate         *time.Time    `json:"first_deficit_date,omitempty"`
 	LastDeficitDate          *time.Time    `json:"last_deficit_date,omitempty"`
 }
+
+// ContainerStatement represents detailed financial statement for a container
+type ContainerStatement struct {
+	Container    FinancialContainer        `json:"container"`
+	Transactions []TransactionDetail       `json:"transactions"`
+	Summary      ContainerStatementSummary `json:"summary"`
+	GeneratedAt  time.Time                 `json:"generated_at"`
+}
+
+type ContainerStatementSummary struct {
+	OpeningBalance   float64 `json:"opening_balance"`
+	TotalIncome      float64 `json:"total_income"`
+	TotalExpenses    float64 `json:"total_expenses"`
+	ClosingBalance   float64 `json:"closing_balance"`
+	TransactionCount int     `json:"transaction_count"`
+}
+
+type TransactionDetail struct {
+	ID                uuid.UUID       `json:"id"`
+	TransactionNumber string          `json:"transaction_number"`
+	Type              TransactionType `json:"type"`
+	Amount            float64         `json:"amount"`
+	Currency          CurrencyCode    `json:"currency"`
+	Description       string          `json:"description"`
+	DescriptionAr     *string         `json:"description_ar,omitempty"`
+	PayeePayer        *string         `json:"payee_payer,omitempty"`
+	ProjectCode       string          `json:"project_code"`
+	ProjectName       string          `json:"project_name"`
+	BalanceBefore     float64         `json:"balance_before"`
+	BalanceAfter      float64         `json:"balance_after"`
+	TransactionDate   time.Time       `json:"transaction_date"`
+	CreatedAt         time.Time       `json:"created_at"`
+}
+
+// ProjectStatement represents detailed financial statement for a project
+type ProjectStatement struct {
+	Project      Project                    `json:"project"`
+	Transactions []ProjectTransactionDetail `json:"transactions"`
+	Summary      ProjectStatementSummary    `json:"summary"`
+	GeneratedAt  time.Time                  `json:"generated_at"`
+}
+
+type ProjectStatementSummary struct {
+	TotalIncome       float64 `json:"total_income"`
+	TotalExpenses     float64 `json:"total_expenses"`
+	NetPosition       float64 `json:"net_position"`
+	TransactionCount  int     `json:"transaction_count"`
+	Budget            float64 `json:"budget"`
+	BudgetUtilization float64 `json:"budget_utilization"`
+}
+
+type ProjectTransactionDetail struct {
+	ID                uuid.UUID       `json:"id"`
+	TransactionNumber string          `json:"transaction_number"`
+	Type              TransactionType `json:"type"`
+	Amount            float64         `json:"amount"`
+	Currency          CurrencyCode    `json:"currency"`
+	Description       string          `json:"description"`
+	DescriptionAr     *string         `json:"description_ar,omitempty"`
+	PayeePayer        *string         `json:"payee_payer,omitempty"`
+	ContainerName     string          `json:"container_name"`
+	ContainerType     ContainerType   `json:"container_type"`
+	TransactionDate   time.Time       `json:"transaction_date"`
+	CreatedAt         time.Time       `json:"created_at"`
+}
+
+// Employee represents an organization employee
+type Employee struct {
+	ID             uuid.UUID  `json:"id"`
+	EmployeeNumber string     `json:"employee_number"`
+	FullName       string     `json:"full_name"`
+	FullNameAr     *string    `json:"full_name_ar,omitempty"`
+	Position       *string    `json:"position,omitempty"`
+	PositionAr     *string    `json:"position_ar,omitempty"`
+	Department     *string    `json:"department,omitempty"`
+	DepartmentAr   *string    `json:"department_ar,omitempty"`
+	Phone          *string    `json:"phone,omitempty"`
+	Email          *string    `json:"email,omitempty"`
+	Salary         *float64   `json:"salary,omitempty"`
+	JoinDate       *time.Time `json:"join_date,omitempty"`
+	IsActive       bool       `json:"is_active"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	CreatedBy      *uuid.UUID `json:"created_by,omitempty"`
+}
+
+// Member represents an affiliated member
+type Member struct {
+	ID               uuid.UUID  `json:"id"`
+	MembershipNumber string     `json:"membership_number"`
+	FullName         string     `json:"full_name"`
+	FullNameAr       *string    `json:"full_name_ar,omitempty"`
+	MemberType       string     `json:"member_type"`
+	Phone            *string    `json:"phone,omitempty"`
+	Email            *string    `json:"email,omitempty"`
+	Address          *string    `json:"address,omitempty"`
+	AddressAr        *string    `json:"address_ar,omitempty"`
+	JoinDate         *time.Time `json:"join_date,omitempty"`
+	Status           string     `json:"status"`
+	IsActive         bool       `json:"is_active"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+	CreatedBy        *uuid.UUID `json:"created_by,omitempty"`
+}
+
+// CreateEmployeeRequest for creating new employees
+type CreateEmployeeRequest struct {
+	EmployeeNumber string     `json:"employee_number"`
+	FullName       string     `json:"full_name"`
+	FullNameAr     *string    `json:"full_name_ar,omitempty"`
+	Position       *string    `json:"position,omitempty"`
+	PositionAr     *string    `json:"position_ar,omitempty"`
+	Department     *string    `json:"department,omitempty"`
+	DepartmentAr   *string    `json:"department_ar,omitempty"`
+	Phone          *string    `json:"phone,omitempty"`
+	Email          *string    `json:"email,omitempty"`
+	Salary         *float64   `json:"salary,omitempty"`
+	JoinDate       *time.Time `json:"join_date,omitempty"`
+}
+
+// UpdateEmployeeRequest for updating employees
+type UpdateEmployeeRequest struct {
+	FullName     *string    `json:"full_name,omitempty"`
+	FullNameAr   *string    `json:"full_name_ar,omitempty"`
+	Position     *string    `json:"position,omitempty"`
+	PositionAr   *string    `json:"position_ar,omitempty"`
+	Department   *string    `json:"department,omitempty"`
+	DepartmentAr *string    `json:"department_ar,omitempty"`
+	Phone        *string    `json:"phone,omitempty"`
+	Email        *string    `json:"email,omitempty"`
+	Salary       *float64   `json:"salary,omitempty"`
+	JoinDate     *time.Time `json:"join_date,omitempty"`
+	IsActive     *bool      `json:"is_active,omitempty"`
+}
+
+// CreateMemberRequest for creating new members
+type CreateMemberRequest struct {
+	MembershipNumber string     `json:"membership_number"`
+	FullName         string     `json:"full_name"`
+	FullNameAr       *string    `json:"full_name_ar,omitempty"`
+	MemberType       string     `json:"member_type"`
+	Phone            *string    `json:"phone,omitempty"`
+	Email            *string    `json:"email,omitempty"`
+	Address          *string    `json:"address,omitempty"`
+	AddressAr        *string    `json:"address_ar,omitempty"`
+	JoinDate         *time.Time `json:"join_date,omitempty"`
+}
+
+// UpdateMemberRequest for updating members
+type UpdateMemberRequest struct {
+	FullName   *string    `json:"full_name,omitempty"`
+	FullNameAr *string    `json:"full_name_ar,omitempty"`
+	MemberType *string    `json:"member_type,omitempty"`
+	Phone      *string    `json:"phone,omitempty"`
+	Email      *string    `json:"email,omitempty"`
+	Address    *string    `json:"address,omitempty"`
+	AddressAr  *string    `json:"address_ar,omitempty"`
+	JoinDate   *time.Time `json:"join_date,omitempty"`
+	Status     *string    `json:"status,omitempty"`
+	IsActive   *bool      `json:"is_active,omitempty"`
+}
+
+// CreateProjectRequest for creating new projects
+type CreateProjectRequest struct {
+	Code        string       `json:"code"`
+	Name        string       `json:"name"`
+	NameAr      *string      `json:"name_ar,omitempty"`
+	Description *string      `json:"description,omitempty"`
+	DonorName   *string      `json:"donor_name,omitempty"`
+	DonorNameAr *string      `json:"donor_name_ar,omitempty"`
+	StartDate   *time.Time   `json:"start_date,omitempty"`
+	EndDate     *time.Time   `json:"end_date,omitempty"`
+	Budget      *float64     `json:"budget,omitempty"`
+	Currency    CurrencyCode `json:"currency"`
+}
+
+// UpdateProjectRequest for updating projects
+type UpdateProjectRequest struct {
+	Name        *string       `json:"name,omitempty"`
+	NameAr      *string       `json:"name_ar,omitempty"`
+	Description *string       `json:"description,omitempty"`
+	DonorName   *string       `json:"donor_name,omitempty"`
+	DonorNameAr *string       `json:"donor_name_ar,omitempty"`
+	StartDate   *time.Time    `json:"start_date,omitempty"`
+	EndDate     *time.Time    `json:"end_date,omitempty"`
+	Budget      *float64      `json:"budget,omitempty"`
+	Currency    *CurrencyCode `json:"currency,omitempty"`
+	IsActive    *bool         `json:"is_active,omitempty"`
+}

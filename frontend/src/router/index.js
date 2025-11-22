@@ -66,6 +66,24 @@ const routes = [
                 component: () => import('@/views/admin/ContainersView.vue'),
                 meta: { requiresRole: ['admin'] },
             },
+            {
+                path: 'admin/projects',
+                name: 'Projects',
+                component: () => import('@/views/admin/ProjectsView.vue'),
+                meta: { requiresRole: ['admin'] },
+            },
+            {
+                path: 'admin/employees',
+                name: 'Employees',
+                component: () => import('@/views/admin/EmployeesView.vue'),
+                meta: { requiresRole: ['admin'] },
+            },
+            {
+                path: 'admin/members',
+                name: 'Members',
+                component: () => import('@/views/admin/MembersView.vue'),
+                meta: { requiresRole: ['admin'] },
+            },
 
 
             {
@@ -82,6 +100,11 @@ const routes = [
                 path: 'reports/deficit',
                 name: 'DeficitReport',
                 component: () => import('@/views/reports/DeficitReportView.vue'),
+            },
+            {
+                path: 'reports/detailed-statement',
+                name: 'DetailedStatement',
+                component: () => import('@/views/reports/DetailedStatementView.vue'),
             },
         ],
     },

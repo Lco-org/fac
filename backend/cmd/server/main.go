@@ -35,6 +35,9 @@ func main() {
 	containerService := services.NewContainerService(db)
 	transactionService := services.NewTransactionService(db)
 	reportService := services.NewReportService(db)
+	projectService := services.NewProjectService(db)
+	employeeService := services.NewEmployeeService(db)
+	memberService := services.NewMemberService(db)
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authService, cfg)
@@ -42,6 +45,9 @@ func main() {
 	containerHandler := handlers.NewContainerHandler(containerService)
 	transactionHandler := handlers.NewTransactionHandler(transactionService)
 	reportHandler := handlers.NewReportHandler(reportService)
+	projectHandler := handlers.NewProjectHandler(projectService)
+	employeeHandler := handlers.NewEmployeeHandler(employeeService)
+	memberHandler := handlers.NewMemberHandler(memberService)
 
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
@@ -113,6 +119,32 @@ func main() {
 	reports.Get("/daily-position", middleware.RequireAnyAuthenticated(), reportHandler.GetDailyPosition)
 	reports.Get("/project-summary", middleware.RequireAnyAuthenticated(), reportHandler.GetProjectSummary)
 	reports.Get("/deficit", middleware.RequireAnyAuthenticated(), reportHandler.GetDeficitReport)
+	reports.Get("/containers/:id/statement", middleware.RequireAnyAuthenticated(), reportHandler.GetContainerStatement)
+	reports.Get("/projects/:id/statement", middleware.RequireAnyAuthenticated(), reportHandler.GetProjectStatement)
+
+	// Admin-only project management routes
+	projects := protected.Group("/projects", middleware.RequireRole(models.RoleAdmin))
+	projects.Get("", projectHandler.ListProjects)
+	projects.Post("", projectHandler.CreateProject)
+	projects.Get("/:id", projectHandler.GetProject)
+	projects.Put("/:id", projectHandler.UpdateProject)
+	projects.Delete("/:id", projectHandler.DeleteProject)
+
+	// Admin-only employee management routes
+	employees := protected.Group("/employees", middleware.RequireRole(models.RoleAdmin))
+	employees.Get("", employeeHandler.ListEmployees)
+	employees.Post("", employeeHandler.CreateEmployee)
+	employees.Get("/:id", employeeHandler.GetEmployee)
+	employees.Put("/:id", employeeHandler.UpdateEmployee)
+	employees.Delete("/:id", employeeHandler.DeleteEmployee)
+
+	// Admin-only member management routes
+	members := protected.Group("/members", middleware.RequireRole(models.RoleAdmin))
+	members.Get("", memberHandler.ListMembers)
+	members.Post("", memberHandler.CreateMember)
+	members.Get("/:id", memberHandler.GetMember)
+	members.Put("/:id", memberHandler.UpdateMember)
+	members.Delete("/:id", memberHandler.DeleteMember)
 
 	// Start server
 	port := cfg.App.Port

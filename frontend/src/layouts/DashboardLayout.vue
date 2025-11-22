@@ -23,6 +23,9 @@ const menuItems = computed(() => {
       children: [
         { title: 'المستخدمين', path: '/admin/users' },
         { title: 'الحسابات المصرفية', path: '/admin/containers' },
+        { title: 'المشاريع', path: '/admin/projects' },
+        { title: 'الموظفين', path: '/admin/employees' },
+        { title: 'الأعضاء المنتسبين', path: '/admin/members' },
       ],
     },
     {
@@ -53,6 +56,7 @@ const menuItems = computed(() => {
         { title: 'الجرد اليومي', path: '/reports/daily-position' },
         { title: 'حركة المشاريع', path: '/reports/project-summary' },
         { title: 'تقرير العجز', path: '/reports/deficit' },
+        { title: 'الجرد المفصل', path: '/reports/detailed-statement' },
       ],
     },
   ]
