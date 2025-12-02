@@ -87,174 +87,149 @@
       </div>
     </div>
 
-    <!-- Create/Edit Modal -->
-    <TransitionRoot as="template" :show="isModalOpen">
-      <Dialog as="div" class="relative z-10" @close="closeModal">
-        <TransitionChild
-          as="template"
-          enter="ease-out duration-300"
-          enter-from="opacity-0"
-          enter-to="opacity-100"
-          leave="ease-in duration-200"
-          leave-from="opacity-100"
-          leave-to="opacity-0"
-        >
-          <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
-        </TransitionChild>
+    <!-- Create/Edit Modal (Standard HTML/CSS) -->
+    <div v-if="isModalOpen" class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+      <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <!-- Background overlay -->
+        <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" aria-hidden="true" @click="closeModal"></div>
 
-        <div class="fixed inset-0 z-10 overflow-y-auto">
-          <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-            <TransitionChild
-              as="template"
-              enter="ease-out duration-300"
-              enter-from="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-              enter-to="opacity-100 translate-y-0 sm:scale-100"
-              leave="ease-in duration-200"
-              leave-from="opacity-100 translate-y-0 sm:scale-100"
-              leave-to="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-            >
-              <DialogPanel class="relative transform overflow-hidden rounded-lg bg-white px-4 pt-5 pb-4 text-right shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
-                <div class="absolute top-0 left-0 hidden pt-4 pl-4 sm:block">
-                  <button
-                    type="button"
-                    class="rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
-                    @click="closeModal"
-                  >
-                    <span class="sr-only">إغلاق</span>
-                    <XMarkIcon class="h-6 w-6" aria-hidden="true" />
-                  </button>
-                </div>
-                <div class="sm:flex sm:items-start">
-                  <div class="mt-3 text-center sm:mt-0 sm:mr-4 sm:text-right w-full">
-                    <DialogTitle as="h3" class="text-lg font-medium leading-6 text-gray-900">
-                      {{ isEditing ? 'تعديل مستخدم' : 'مستخدم جديد' }}
-                    </DialogTitle>
-                    <div class="mt-4 space-y-4">
-                      <!-- Username -->
-                      <div>
-                        <label for="username" class="block text-sm font-medium text-gray-700">اسم المستخدم</label>
-                        <div class="mt-1">
-                          <input
-                            type="text"
-                            name="username"
-                            id="username"
-                            v-model="form.username"
-                            :disabled="isEditing"
-                            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm disabled:bg-gray-100"
-                          />
-                        </div>
-                      </div>
-
-                      <!-- Full Name -->
-                      <div>
-                        <label for="full_name" class="block text-sm font-medium text-gray-700">الاسم الكامل (English)</label>
-                        <div class="mt-1">
-                          <input
-                            type="text"
-                            name="full_name"
-                            id="full_name"
-                            v-model="form.full_name"
-                            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                          />
-                        </div>
-                      </div>
-
-                      <!-- Full Name AR -->
-                      <div>
-                        <label for="full_name_ar" class="block text-sm font-medium text-gray-700">الاسم الكامل (عربي)</label>
-                        <div class="mt-1">
-                          <input
-                            type="text"
-                            name="full_name_ar"
-                            id="full_name_ar"
-                            v-model="form.full_name_ar"
-                            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                          />
-                        </div>
-                      </div>
-
-                      <!-- Email -->
-                      <div>
-                        <label for="email" class="block text-sm font-medium text-gray-700">البريد الإلكتروني</label>
-                        <div class="mt-1">
-                          <input
-                            type="email"
-                            name="email"
-                            id="email"
-                            v-model="form.email"
-                            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                          />
-                        </div>
-                      </div>
-
-                      <!-- Password (Create Only) -->
-                      <div v-if="!isEditing">
-                        <label for="password" class="block text-sm font-medium text-gray-700">كلمة المرور</label>
-                        <div class="mt-1">
-                          <input
-                            type="password"
-                            name="password"
-                            id="password"
-                            v-model="form.password"
-                            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                          />
-                        </div>
-                      </div>
-
-                      <!-- Role -->
-                      <div>
-                        <label for="role" class="block text-sm font-medium text-gray-700">الدور</label>
-                        <div class="mt-1">
-                          <select
-                            id="role"
-                            name="role"
-                            v-model="form.role"
-                            class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
-                          >
-                            <option value="admin">مدير نظام</option>
-                            <option value="finance">موظف مالية</option>
-                            <option value="auditor">مدقق حسابات</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <!-- Active Status (Edit Only) -->
-                      <div v-if="isEditing" class="flex items-center">
-                        <input
-                          id="is_active"
-                          name="is_active"
-                          type="checkbox"
-                          v-model="form.is_active"
-                          class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                        />
-                        <label for="is_active" class="mr-2 block text-sm text-gray-900">حساب نشط</label>
-                      </div>
-                    </div>
+        <!-- Modal panel -->
+        <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+        <div class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-right overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+          <div class="hidden sm:block absolute top-0 left-0 pt-4 pl-4">
+            <button type="button" class="bg-white rounded-md text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500" @click="closeModal">
+              <span class="sr-only">إغلاق</span>
+              <XMarkIcon class="h-6 w-6" aria-hidden="true" />
+            </button>
+          </div>
+          <div class="sm:flex sm:items-start">
+            <div class="mt-3 text-center sm:mt-0 sm:mr-4 sm:text-right w-full">
+              <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">
+                {{ isEditing ? 'تعديل مستخدم' : 'مستخدم جديد' }}
+              </h3>
+              <div class="mt-4 space-y-4">
+                <!-- Username -->
+                <div>
+                  <label for="username" class="block text-sm font-medium text-gray-700">اسم المستخدم</label>
+                  <div class="mt-1">
+                    <input
+                      type="text"
+                      name="username"
+                      id="username"
+                      v-model="form.username"
+                      :disabled="isEditing"
+                      class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm disabled:bg-gray-100"
+                    />
                   </div>
                 </div>
-                <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
-                  <button
-                    type="button"
-                    class="inline-flex w-full justify-center rounded-md border border-transparent bg-primary-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 sm:ml-3 sm:w-auto sm:text-sm"
-                    @click="saveUser"
-                    :disabled="loading"
-                  >
-                    {{ loading ? 'جاري الحفظ...' : 'حفظ' }}
-                  </button>
-                  <button
-                    type="button"
-                    class="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 sm:mt-0 sm:w-auto sm:text-sm"
-                    @click="closeModal"
-                  >
-                    إلغاء
-                  </button>
+
+                <!-- Full Name -->
+                <div>
+                  <label for="full_name" class="block text-sm font-medium text-gray-700">الاسم الكامل (English)</label>
+                  <div class="mt-1">
+                    <input
+                      type="text"
+                      name="full_name"
+                      id="full_name"
+                      v-model="form.full_name"
+                      class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    />
+                  </div>
                 </div>
-              </DialogPanel>
-            </TransitionChild>
+
+                <!-- Full Name AR -->
+                <div>
+                  <label for="full_name_ar" class="block text-sm font-medium text-gray-700">الاسم الكامل (عربي)</label>
+                  <div class="mt-1">
+                    <input
+                      type="text"
+                      name="full_name_ar"
+                      id="full_name_ar"
+                      v-model="form.full_name_ar"
+                      class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    />
+                  </div>
+                </div>
+
+                <!-- Email -->
+                <div>
+                  <label for="email" class="block text-sm font-medium text-gray-700">البريد الإلكتروني</label>
+                  <div class="mt-1">
+                    <input
+                      type="email"
+                      name="email"
+                      id="email"
+                      v-model="form.email"
+                      class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    />
+                  </div>
+                </div>
+
+                <!-- Password (Create Only) -->
+                <div v-if="!isEditing">
+                  <label for="password" class="block text-sm font-medium text-gray-700">كلمة المرور</label>
+                  <div class="mt-1">
+                    <input
+                      type="password"
+                      name="password"
+                      id="password"
+                      v-model="form.password"
+                      class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    />
+                  </div>
+                </div>
+
+                <!-- Role -->
+                <div>
+                  <label for="role" class="block text-sm font-medium text-gray-700">الدور</label>
+                  <div class="mt-1">
+                    <select
+                      id="role"
+                      name="role"
+                      v-model="form.role"
+                      class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"
+                    >
+                      <option value="admin">مدير نظام</option>
+                      <option value="finance">موظف مالية</option>
+                      <option value="auditor">مدقق حسابات</option>
+                    </select>
+                  </div>
+                </div>
+
+                <!-- Active Status (Edit Only) -->
+                <div v-if="isEditing" class="flex items-center">
+                  <input
+                    id="is_active"
+                    name="is_active"
+                    type="checkbox"
+                    v-model="form.is_active"
+                    class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <label for="is_active" class="mr-2 block text-sm text-gray-900">حساب نشط</label>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+            <button
+              type="button"
+              class="inline-flex w-full justify-center rounded-md border border-transparent bg-primary-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:ml-3 sm:w-auto sm:text-sm"
+              @click="saveUser"
+              :disabled="loading"
+            >
+              {{ loading ? 'جاري الحفظ...' : 'حفظ' }}
+            </button>
+            <button
+              type="button"
+              class="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 sm:mt-0 sm:w-auto sm:text-sm"
+              @click="closeModal"
+            >
+              إلغاء
+            </button>
           </div>
         </div>
-      </Dialog>
-    </TransitionRoot>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -337,6 +312,17 @@ const closeModal = () => {
 const saveUser = async () => {
   loading.value = true
   try {
+    if (!form.value.username || !form.value.full_name || !form.value.email || !form.value.password) {
+      alert('يرجى ملء جميع الحقول المطلوبة')
+      return
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    if (!emailRegex.test(form.value.email)) {
+      alert('البريد الإلكتروني غير صالح. يجب أن يكون بصيغة: example@domain.com')
+      return
+    }
+
     if (isEditing.value) {
       await api.put(`/users/${form.value.id}`, {
         full_name: form.value.full_name,
