@@ -238,6 +238,24 @@ type ProjectStatementSummary struct {
 	BudgetUtilization float64 `json:"budget_utilization"`
 }
 
+type DashboardSummary struct {
+	BankAccounts   []BankDashboardSummary     `json:"bank_accounts"`
+	Projects       []ProjectDashboardSummary  `json:"projects"`
+	RecentIncome   []ProjectTransactionDetail `json:"recent_income"`
+	RecentExpenses []ProjectTransactionDetail `json:"recent_expenses"`
+	GeneratedAt    time.Time                  `json:"generated_at"`
+}
+
+type BankDashboardSummary struct {
+	Container        FinancialContainer  `json:"container"`
+	LastTransactions []TransactionDetail `json:"last_transactions"`
+}
+
+type ProjectDashboardSummary struct {
+	Project          Project                    `json:"project"`
+	LastTransactions []ProjectTransactionDetail `json:"last_transactions"`
+}
+
 type ProjectTransactionDetail struct {
 	ID                uuid.UUID       `json:"id"`
 	TransactionNumber string          `json:"transaction_number"`

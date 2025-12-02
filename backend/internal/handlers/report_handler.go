@@ -17,6 +17,18 @@ func NewReportHandler(reportService *services.ReportService) *ReportHandler {
 	}
 }
 
+// GetDashboardSummary returns dashboard summary
+func (h *ReportHandler) GetDashboardSummary(c *fiber.Ctx) error {
+	summary, err := h.reportService.GetDashboardSummary(c.Context())
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to generate dashboard summary",
+		})
+	}
+
+	return c.JSON(summary)
+}
+
 // GetContainerStatement returns detailed financial statement for a container
 func (h *ReportHandler) GetContainerStatement(c *fiber.Ctx) error {
 	containerID := c.Params("id")

@@ -116,7 +116,7 @@ func main() {
 
 	// Report routes (All authenticated users can view)
 	reports := protected.Group("/reports")
-
+	reports.Get("/dashboard", middleware.RequireAnyAuthenticated(), reportHandler.GetDashboardSummary)
 	reports.Get("/containers/:id/statement", middleware.RequireAnyAuthenticated(), reportHandler.GetContainerStatement)
 	reports.Get("/projects/:id/statement", middleware.RequireAnyAuthenticated(), reportHandler.GetProjectStatement)
 
