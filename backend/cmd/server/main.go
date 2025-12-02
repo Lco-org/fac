@@ -38,6 +38,7 @@ func main() {
 	projectService := services.NewProjectService(db)
 	employeeService := services.NewEmployeeService(db)
 	memberService := services.NewMemberService(db)
+	dashboardService := services.NewDashboardService(db)
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authService, cfg)
@@ -48,6 +49,7 @@ func main() {
 	projectHandler := handlers.NewProjectHandler(projectService)
 	employeeHandler := handlers.NewEmployeeHandler(employeeService)
 	memberHandler := handlers.NewMemberHandler(memberService)
+	dashboardHandler := handlers.NewDashboardHandler(dashboardService)
 
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
@@ -99,6 +101,11 @@ func main() {
 	adminUsers.Put("/:id", userHandler.UpdateUser)
 	adminUsers.Delete("/:id", userHandler.DeleteUser)
 	adminUsers.Patch("/:id/role", userHandler.UpdateUserRole)
+
+	// Admin-only dashboard widget configuration routes
+	dashboardWidgets := protected.Group("/admin/dashboard-widgets", middleware.RequireRole(models.RoleAdmin))
+	dashboardWidgets.Get("", dashboardHandler.GetWidgetConfigs)
+	dashboardWidgets.Put("/:id", dashboardHandler.UpdateWidgetConfig)
 
 	// Admin-only container management routes
 	containers := protected.Group("/containers", middleware.RequireRole(models.RoleAdmin))

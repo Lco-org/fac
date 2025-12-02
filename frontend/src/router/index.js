@@ -84,6 +84,12 @@ const routes = [
                 component: () => import('@/views/admin/MembersView.vue'),
                 meta: { requiresRole: ['admin'] },
             },
+            {
+                path: 'admin/dashboard-config',
+                name: 'DashboardConfig',
+                component: () => import('@/views/admin/DashboardConfigView.vue'),
+                meta: { requiresRole: ['admin'] },
+            },
 
 
 

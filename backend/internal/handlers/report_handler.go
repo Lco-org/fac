@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"cso-erp/internal/models"
 	"cso-erp/internal/services"
 	"time"
 
@@ -19,10 +20,22 @@ func NewReportHandler(reportService *services.ReportService) *ReportHandler {
 
 // GetDashboardSummary returns dashboard summary
 func (h *ReportHandler) GetDashboardSummary(c *fiber.Ctx) error {
-	summary, err := h.reportService.GetDashboardSummary(c.Context())
+	// Get user role from context (set by auth middleware)
+	userRole := c.Locals("user_role").(models.UserRole)
+
+	summary, err := h.reportService.GetDashboardSummary(c.Context(), string(userRole))
 	if err != nil {
+		// Log the error for debugging
+		// Using standard log package or fiber's logger if available. Assuming standard log for now as used in service.
+		// We need to import "log" if not present, but let's use fmt.Println or similar if log isn't imported,
+		// or better, just add the import.
+		// Actually, let's just use c.App().Logger() or similar if possible, but standard log is safer.
+		// Let's assume we can add "log" to imports or it's already there?
+		// Checking imports... "time", "github.com/gofiber/fiber/v2", "cso-erp/internal/models", "cso-erp/internal/services".
+		// I need to add "log" to imports.
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to generate dashboard summary",
+			"error":   "Failed to generate dashboard summary",
+			"details": err.Error(), // Temporarily expose error details to frontend for easier debugging
 		})
 	}
 

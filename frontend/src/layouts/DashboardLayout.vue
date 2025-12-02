@@ -26,6 +26,7 @@ const menuItems = computed(() => {
         { title: 'المشاريع', path: '/admin/projects' },
         { title: 'الموظفين', path: '/admin/employees' },
         { title: 'الأعضاء المنتسبين', path: '/admin/members' },
+        { title: 'إعدادات لوحة التحكم', path: '/admin/dashboard-config' },
       ],
     },
     {

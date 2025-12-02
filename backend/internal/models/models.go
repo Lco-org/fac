@@ -256,6 +256,25 @@ type ProjectDashboardSummary struct {
 	LastTransactions []ProjectTransactionDetail `json:"last_transactions"`
 }
 
+// DashboardWidget represents a configurable dashboard widget
+type DashboardWidget struct {
+	ID           uuid.UUID `json:"id"`
+	WidgetKey    string    `json:"widget_key"`
+	WidgetName   string    `json:"widget_name"`
+	WidgetNameEn string    `json:"widget_name_en"`
+	IsEnabled    bool      `json:"is_enabled"`
+	AllowedRoles []string  `json:"allowed_roles"`
+	DisplayOrder int       `json:"display_order"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// UpdateWidgetConfigRequest for updating widget configuration
+type UpdateWidgetConfigRequest struct {
+	IsEnabled    *bool    `json:"is_enabled,omitempty"`
+	AllowedRoles []string `json:"allowed_roles,omitempty"`
+	DisplayOrder *int     `json:"display_order,omitempty"`
+}
 type ProjectTransactionDetail struct {
 	ID                uuid.UUID       `json:"id"`
 	TransactionNumber string          `json:"transaction_number"`
@@ -265,6 +284,8 @@ type ProjectTransactionDetail struct {
 	Description       string          `json:"description"`
 	DescriptionAr     *string         `json:"description_ar,omitempty"`
 	PayeePayer        *string         `json:"payee_payer,omitempty"`
+	ProjectCode       string          `json:"project_code,omitempty"`
+	ProjectName       string          `json:"project_name,omitempty"`
 	ContainerName     string          `json:"container_name"`
 	ContainerType     ContainerType   `json:"container_type"`
 	TransactionDate   time.Time       `json:"transaction_date"`
