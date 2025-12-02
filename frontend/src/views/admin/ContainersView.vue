@@ -7,6 +7,7 @@
         <p class="mt-1 text-sm text-gray-500">إدارة الصناديق النقدية والحسابات المصرفية</p>
       </div>
       <button
+        type="button"
         @click="openCreateModal"
         class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
       >
@@ -18,7 +19,7 @@
     <!-- Containers List -->
     <div class="bg-white shadow overflow-hidden sm:rounded-lg">
       <ul role="list" class="divide-y divide-gray-200">
-        <li v-for="container in containers" :key="container.id" class="px-4 py-4 sm:px-6 hover:bg-gray-50">
+        <li v-for="container in (containers || [])" :key="container.id" class="px-4 py-4 sm:px-6 hover:bg-gray-50">
           <div class="flex items-center justify-between">
             <div class="flex items-center min-w-0">
               <div class="flex-shrink-0">
@@ -83,7 +84,7 @@
           </div>
         </li>
       </ul>
-      <div v-if="containers.length === 0" class="text-center py-12">
+      <div v-if="!containers || containers.length === 0" class="text-center py-12">
         <BuildingLibraryIcon class="mx-auto h-12 w-12 text-gray-400" />
         <h3 class="mt-2 text-sm font-medium text-gray-900">لا يوجد حسابات</h3>
         <p class="mt-1 text-sm text-gray-500">ابدأ بإضافة حساب مصرفي أو صندوق نقدي جديد.</p>
@@ -135,7 +136,7 @@
                     <div class="mt-4 space-y-4">
                       <!-- Name -->
                       <div>
-                        <label for="name" class="block text-sm font-medium text-gray-700">اسم الحساب</label>
+                        <label for="name" class="block text-sm font-medium text-gray-700">اسم الحساب (English)</label>
                         <div class="mt-1">
                           <input
                             type="text"
@@ -253,7 +254,7 @@
                       </div>
 
                       <!-- Active Status (Edit Only) -->
-                      <div v-if="isEditing" class="flex items-center pt-4">
+                      <div v-if="isEditing" class="flex items-center">
                         <input
                           id="is_active"
                           name="is_active"
@@ -293,7 +294,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { Dialog, DialogPanel, DialogTitle, TransitionChild, TransitionRoot } from '@headlessui/vue'
 import { PlusIcon, PencilIcon, TrashIcon, XMarkIcon, BanknotesIcon, BuildingLibraryIcon, NoSymbolIcon, CheckCircleIcon } from '@heroicons/vue/24/outline'
 import api from '@/api'
@@ -309,7 +310,7 @@ const form = ref({
   id: null,
   name: '',
   name_ar: '',
-  type: 'cash',
+  type: 'bank',
   currency: 'LYD',
   balance: 0,
   bank_name: '',
@@ -334,7 +335,7 @@ const openCreateModal = () => {
     id: null,
     name: '',
     name_ar: '',
-    type: 'cash',
+    type: 'bank',
     currency: 'LYD',
     balance: 0,
     bank_name: '',
@@ -371,16 +372,32 @@ const closeModal = () => {
 const saveContainer = async () => {
   loading.value = true
   try {
+    if (!form.value.name || !form.value.currency || !form.value.type) {
+      alert('يرجى إدخال اسم الحساب والعملة والنوع')
+      return
+    }
+    if (form.value.type === 'bank') {
+      if (!form.value.bank_name || !form.value.account_number) {
+        alert('يرجى إدخال اسم البنك ورقم الحساب للحسابات المصرفية')
+        return
+      }
+    }
+
+    const payload = { ...form.value }
+
     if (isEditing.value) {
-      await api.put(`/containers/${form.value.id}`, form.value)
+      await api.put(`/containers/${form.value.id}`, payload)
     } else {
-      await api.post('/containers', form.value)
+      delete payload.id
+      await api.post('/containers', payload)
     }
     await fetchContainers()
     closeModal()
+    alert(isEditing.value ? 'تم تحديث الحساب بنجاح' : 'تم إنشاء الحساب بنجاح')
   } catch (error) {
     console.error('Failed to save container:', error)
-    alert('حدث خطأ أثناء حفظ البيانات')
+    const errorMessage = error.response?.data?.error || 'حدث خطأ أثناء حفظ البيانات'
+    alert(errorMessage)
   } finally {
     loading.value = false
   }
@@ -403,14 +420,40 @@ const toggleActive = async (container) => {
 }
 
 const confirmDelete = async (container) => {
-  if (confirm(`هل أنت متأكد من حذف الحساب ${container.name} نهائياً؟ لا يمكن التراجع عن هذا الإجراء.`)) {
-    try {
-      await api.delete(`/containers/${container.id}`)
-      await fetchContainers()
-    } catch (error) {
-      console.error('Failed to delete container:', error)
-      alert(error.response?.data?.error || 'حدث خطأ أثناء حذف الحساب')
+  // First confirmation with strong warning
+  const firstConfirm = confirm(
+    `⚠️ تحذير: عملية خطيرة!\n\n` +
+    `سيتم حذف الحساب "${container.name}" مع جميع المعاملات المالية المرتبطة به بشكل نهائي.\n\n` +
+    `⚠️ لا يمكن التراجع عن هذا الإجراء!\n\n` +
+    `هل أنت متأكد من المتابعة؟`
+  )
+  
+  if (!firstConfirm) return
+  
+  // Second confirmation for extra safety
+  const secondConfirm = confirm(
+    `⚠️ تأكيد نهائي:\n\n` +
+    `أنت على وشك حذف "${container.name}" وجميع معاملاته المالية.\n\n` +
+    `اضغط "موافق" للمتابعة أو "إلغاء" للتراجع.`
+  )
+  
+  if (!secondConfirm) return
+  
+  try {
+    await api.delete(`/containers/${container.id}`)
+    await fetchContainers()
+    alert('✅ تم حذف الحساب وجميع معاملاته بنجاح')
+  } catch (error) {
+    console.error('Failed to delete container:', error)
+    const errorMessage = error.response?.data?.error || 'حدث خطأ أثناء حذف الحساب'
+    
+    // Translate common error messages to Arabic
+    let arabicMessage = errorMessage
+    if (errorMessage.includes('Container not found')) {
+      arabicMessage = 'الحساب غير موجود'
     }
+    
+    alert(arabicMessage)
   }
 }
 

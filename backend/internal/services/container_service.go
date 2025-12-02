@@ -2,8 +2,6 @@ package services
 
 import (
 	"context"
-	"errors"
-	"strings"
 	"time"
 
 	"cso-erp/internal/database"
@@ -131,17 +129,14 @@ func (s *ContainerService) UpdateContainer(ctx context.Context, id uuid.UUID, re
 	return &c, nil
 }
 
-// DeleteContainer deletes a container permanently
+// DeleteContainer deletes a container permanently along with all associated transactions
+// WARNING: This is a CASCADE DELETE - all transactions will be permanently deleted
 func (s *ContainerService) DeleteContainer(ctx context.Context, id uuid.UUID) error {
 	result, err := s.db.ExecContext(ctx, `
 		DELETE FROM financial_containers WHERE id = $1
 	`, id)
 
 	if err != nil {
-		// Check for foreign key constraint violation
-		if strings.Contains(err.Error(), "violates foreign key constraint") {
-			return errors.New("cannot delete container: associated transactions exist (try deactivating instead)")
-		}
 		return err
 	}
 
