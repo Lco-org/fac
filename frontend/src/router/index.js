@@ -86,21 +86,7 @@ const routes = [
             },
 
 
-            {
-                path: 'reports/daily-position',
-                name: 'DailyPosition',
-                component: () => import('@/views/reports/DailyPositionView.vue'),
-            },
-            {
-                path: 'reports/project-summary',
-                name: 'ProjectSummary',
-                component: () => import('@/views/reports/ProjectSummaryView.vue'),
-            },
-            {
-                path: 'reports/deficit',
-                name: 'DeficitReport',
-                component: () => import('@/views/reports/DeficitReportView.vue'),
-            },
+
             {
                 path: 'reports/detailed-statement',
                 name: 'DetailedStatement',

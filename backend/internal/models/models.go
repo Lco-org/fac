@@ -188,62 +188,6 @@ type TransactionResponse struct {
 	Message          string      `json:"message,omitempty"`
 }
 
-type DailyPositionReport struct {
-	CashContainers []ContainerPosition `json:"cash_containers"`
-	BankContainers []ContainerPosition `json:"bank_containers"`
-	TotalCash      float64             `json:"total_cash"`
-	TotalBank      float64             `json:"total_bank"`
-	TotalDeficit   float64             `json:"total_deficit"`
-	GeneratedAt    time.Time           `json:"generated_at"`
-}
-
-type ContainerPosition struct {
-	ID            uuid.UUID     `json:"id"`
-	Name          string        `json:"name"`
-	NameAr        *string       `json:"name_ar,omitempty"`
-	Type          ContainerType `json:"type"`
-	Currency      CurrencyCode  `json:"currency"`
-	Balance       float64       `json:"balance"`
-	BalanceStatus string        `json:"balance_status"`
-	TodayIncome   float64       `json:"today_income"`
-	TodayExpenses float64       `json:"today_expenses"`
-	BankName      *string       `json:"bank_name,omitempty"`
-	AccountNumber *string       `json:"account_number,omitempty"`
-	Location      *string       `json:"location,omitempty"`
-}
-
-type ProjectSummary struct {
-	ID               uuid.UUID    `json:"id"`
-	Code             string       `json:"code"`
-	Name             string       `json:"name"`
-	NameAr           *string      `json:"name_ar,omitempty"`
-	Currency         CurrencyCode `json:"currency"`
-	DonorName        *string      `json:"donor_name,omitempty"`
-	TotalIncome      float64      `json:"total_income"`
-	TotalExpenses    float64      `json:"total_expenses"`
-	NetPosition      float64      `json:"net_position"`
-	TransactionCount int          `json:"transaction_count"`
-}
-
-type DeficitReport struct {
-	Containers      []DeficitContainer `json:"containers"`
-	TotalDeficit    float64            `json:"total_deficit"`
-	ContainersCount int                `json:"containers_count"`
-	GeneratedAt     time.Time          `json:"generated_at"`
-}
-
-type DeficitContainer struct {
-	ID                       uuid.UUID     `json:"id"`
-	Name                     string        `json:"name"`
-	NameAr                   *string       `json:"name_ar,omitempty"`
-	Type                     ContainerType `json:"type"`
-	Currency                 CurrencyCode  `json:"currency"`
-	DeficitAmount            float64       `json:"deficit_amount"`
-	DeficitTransactionsCount int           `json:"deficit_transactions_count"`
-	FirstDeficitDate         *time.Time    `json:"first_deficit_date,omitempty"`
-	LastDeficitDate          *time.Time    `json:"last_deficit_date,omitempty"`
-}
-
 // ContainerStatement represents detailed financial statement for a container
 type ContainerStatement struct {
 	Container    FinancialContainer        `json:"container"`

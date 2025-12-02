@@ -53,9 +53,7 @@ const menuItems = computed(() => {
       icon: '📈',
       roles: ['admin', 'finance', 'auditor'],
       children: [
-        { title: 'الجرد اليومي', path: '/reports/daily-position' },
-        { title: 'حركة المشاريع', path: '/reports/project-summary' },
-        { title: 'تقرير العجز', path: '/reports/deficit' },
+
         { title: 'الجرد المفصل', path: '/reports/detailed-statement' },
       ],
     },
