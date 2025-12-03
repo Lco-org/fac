@@ -121,3 +121,31 @@ func (s *DashboardService) UpdateWidgetConfig(ctx context.Context, widgetID stri
 
 	return nil
 }
+
+// BulkUpdateWidgetOrder updates display order for multiple widgets in a transaction
+func (s *DashboardService) BulkUpdateWidgetOrder(ctx context.Context, updates []models.WidgetOrderUpdate) error {
+	tx, err := s.db.BeginTx(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	stmt, err := tx.PrepareContext(ctx, `
+		UPDATE dashboard_widgets 
+		SET display_order = $1, updated_at = CURRENT_TIMESTAMP 
+		WHERE id = $2
+	`)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for _, update := range updates {
+		_, err := stmt.ExecContext(ctx, update.DisplayOrder, update.ID)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}

@@ -278,6 +278,12 @@ type UpdateWidgetConfigRequest struct {
 	DisplayOrder *int     `json:"display_order,omitempty"`
 }
 
+// WidgetOrderUpdate for bulk updating widget display order
+type WidgetOrderUpdate struct {
+	ID           string `json:"id"`
+	DisplayOrder int    `json:"display_order"`
+}
+
 type DailyPosition struct {
 	CashContainers []FinancialContainer `json:"cash_containers"`
 	BankContainers []FinancialContainer `json:"bank_containers"`

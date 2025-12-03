@@ -51,3 +51,24 @@ func (h *DashboardHandler) UpdateWidgetConfig(c *fiber.Ctx) error {
 		"message": "Widget configuration updated successfully",
 	})
 }
+
+// BulkUpdateWidgetOrder updates display order for multiple widgets (admin only)
+func (h *DashboardHandler) BulkUpdateWidgetOrder(c *fiber.Ctx) error {
+	var req []models.WidgetOrderUpdate
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid request body",
+		})
+	}
+
+	err := h.dashboardService.BulkUpdateWidgetOrder(c.Context(), req)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to update widget order",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Widget order updated successfully",
+	})
+}

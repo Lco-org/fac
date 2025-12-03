@@ -6,6 +6,7 @@ const loading = ref(true)
 const saving = ref(false)
 const widgets = ref([])
 const error = ref(null)
+const draggedIndex = ref(null)
 
 const availableRoles = [
   { value: 'admin', label: 'مدير النظام' },
@@ -46,6 +47,28 @@ const saveWidget = async (widget) => {
   }
 }
 
+const saveBulkOrder = async () => {
+  try {
+    saving.value = true
+    const updates = widgets.value.map((widget, index) => ({
+      id: widget.id,
+      display_order: index + 1
+    }))
+    
+    await api.post('/admin/dashboard-widgets/bulk-order', updates)
+    
+    // Update local display_order values
+    widgets.value.forEach((widget, index) => {
+      widget.display_order = index + 1
+    })
+  } catch (err) {
+    console.error('Failed to save order:', err)
+    alert('فشل حفظ الترتيب')
+  } finally {
+    saving.value = false
+  }
+}
+
 const toggleRole = (widget, roleValue) => {
   const index = widget.allowed_roles.indexOf(roleValue)
   if (index === -1) {
@@ -56,16 +79,78 @@ const toggleRole = (widget, roleValue) => {
   saveWidget(widget)
 }
 
-const updateOrder = (widget) => {
-  saveWidget(widget)
-  // Re-sort locally to reflect changes immediately
-  widgets.value.sort((a, b) => a.display_order - b.display_order)
+// Drag and drop handlers
+const handleDragStart = (index) => {
+  draggedIndex.value = index
+}
+
+const handleDragOver = (e, index) => {
+  e.preventDefault()
+  if (draggedIndex.value === null || draggedIndex.value === index) return
+  
+  // Visual feedback
+  e.currentTarget.classList.add('drag-over')
+}
+
+const handleDragLeave = (e) => {
+  e.currentTarget.classList.remove('drag-over')
+}
+
+const handleDrop = (e, dropIndex) => {
+  e.preventDefault()
+  e.currentTarget.classList.remove('drag-over')
+  
+  if (draggedIndex.value === null || draggedIndex.value === dropIndex) return
+  
+  // Reorder array
+  const draggedItem = widgets.value[draggedIndex.value]
+  widgets.value.splice(draggedIndex.value, 1)
+  widgets.value.splice(dropIndex, 0, draggedItem)
+  
+  draggedIndex.value = null
+  
+  // Save new order
+  saveBulkOrder()
+}
+
+const handleDragEnd = () => {
+  draggedIndex.value = null
+  // Remove any lingering drag-over classes
+  document.querySelectorAll('.drag-over').forEach(el => {
+    el.classList.remove('drag-over')
+  })
+}
+
+// Up/Down button handlers
+const moveUp = (index) => {
+  if (index === 0) return
+  
+  const temp = widgets.value[index]
+  widgets.value[index] = widgets.value[index - 1]
+  widgets.value[index - 1] = temp
+  
+  saveBulkOrder()
+}
+
+const moveDown = (index) => {
+  if (index === widgets.value.length - 1) return
+  
+  const temp = widgets.value[index]
+  widgets.value[index] = widgets.value[index + 1]
+  widgets.value[index + 1] = temp
+  
+  saveBulkOrder()
 }
 </script>
 
 <template>
   <div class="p-6">
-    <h1 class="text-2xl font-bold mb-6 text-gray-800">إعدادات لوحة التحكم</h1>
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-2xl font-bold text-gray-800">إعدادات لوحة التحكم</h1>
+      <div class="text-sm text-gray-600">
+        💡 اسحب الصفوف لإعادة الترتيب أو استخدم الأسهم
+      </div>
+    </div>
 
     <div v-if="loading" class="flex justify-center py-12">
       <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
@@ -80,6 +165,9 @@ const updateOrder = (widget) => {
         <thead class="bg-gray-50">
           <tr>
             <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+              الترتيب
+            </th>
+            <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
               القسم
             </th>
             <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -88,17 +176,69 @@ const updateOrder = (widget) => {
             <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
               الأدوار المسموح لها
             </th>
-            <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-              الترتيب
-            </th>
           </tr>
         </thead>
         <tbody class="bg-white divide-y divide-gray-200">
-          <tr v-for="widget in widgets" :key="widget.id">
+          <tr 
+            v-for="(widget, index) in widgets" 
+            :key="widget.id"
+            draggable="true"
+            @dragstart="handleDragStart(index)"
+            @dragover="handleDragOver($event, index)"
+            @dragleave="handleDragLeave"
+            @drop="handleDrop($event, index)"
+            @dragend="handleDragEnd"
+            class="hover:bg-gray-50 transition-colors cursor-move"
+            :class="{ 'opacity-50': draggedIndex === index }"
+          >
+            <!-- Order Controls -->
+            <td class="px-6 py-4 whitespace-nowrap">
+              <div class="flex items-center gap-2">
+                <!-- Drag Handle -->
+                <div class="text-gray-400 hover:text-gray-600 cursor-grab active:cursor-grabbing">
+                  <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M7 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 2zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 14zm6-8a2 2 0 1 0-.001-4.001A2 2 0 0 0 13 6zm0 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 14z"></path>
+                  </svg>
+                </div>
+                
+                <!-- Up/Down Buttons -->
+                <div class="flex flex-col gap-1">
+                  <button
+                    @click="moveUp(index)"
+                    :disabled="index === 0"
+                    class="p-1 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    title="تحريك لأعلى"
+                  >
+                    <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
+                    </svg>
+                  </button>
+                  <button
+                    @click="moveDown(index)"
+                    :disabled="index === widgets.length - 1"
+                    class="p-1 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                    title="تحريك لأسفل"
+                  >
+                    <svg class="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                  </button>
+                </div>
+                
+                <!-- Order Number Badge -->
+                <div class="bg-primary-100 text-primary-800 px-2 py-1 rounded-full text-xs font-semibold">
+                  {{ index + 1 }}
+                </div>
+              </div>
+            </td>
+
+            <!-- Widget Name -->
             <td class="px-6 py-4 whitespace-nowrap">
               <div class="text-sm font-medium text-gray-900">{{ widget.widget_name }}</div>
               <div class="text-xs text-gray-500">{{ widget.widget_key }}</div>
             </td>
+
+            <!-- Enable/Disable Toggle -->
             <td class="px-6 py-4 whitespace-nowrap">
               <button 
                 @click="widget.is_enabled = !widget.is_enabled; saveWidget(widget)"
@@ -111,6 +251,8 @@ const updateOrder = (widget) => {
                 ></span>
               </button>
             </td>
+
+            <!-- Allowed Roles -->
             <td class="px-6 py-4">
               <div class="flex flex-wrap gap-2">
                 <button
@@ -126,18 +268,20 @@ const updateOrder = (widget) => {
                 </button>
               </div>
             </td>
-            <td class="px-6 py-4 whitespace-nowrap">
-              <input 
-                type="number" 
-                v-model="widget.display_order" 
-                @change="updateOrder(widget)"
-                class="w-16 rounded border-gray-300 text-center text-sm focus:ring-primary-500 focus:border-primary-500"
-                min="1"
-              >
-            </td>
           </tr>
         </tbody>
       </table>
     </div>
   </div>
 </template>
+
+<style scoped>
+.drag-over {
+  border-top: 3px solid #3b82f6;
+  background-color: #eff6ff;
+}
+
+tr[draggable="true"]:active {
+  cursor: grabbing;
+}
+</style>

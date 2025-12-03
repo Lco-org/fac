@@ -106,6 +106,7 @@ func main() {
 	dashboardWidgets := protected.Group("/admin/dashboard-widgets", middleware.RequireRole(models.RoleAdmin))
 	dashboardWidgets.Get("", dashboardHandler.GetWidgetConfigs)
 	dashboardWidgets.Put("/:id", dashboardHandler.UpdateWidgetConfig)
+	dashboardWidgets.Post("/bulk-order", dashboardHandler.BulkUpdateWidgetOrder)
 
 	// Admin-only container management routes
 	containers := protected.Group("/containers", middleware.RequireRole(models.RoleAdmin))
