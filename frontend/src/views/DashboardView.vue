@@ -4,6 +4,7 @@ import api from '@/api/client'
 import { format } from 'date-fns'
 import { ar } from 'date-fns/locale'
 import { useAuthStore } from '@/stores/auth'
+import * as XLSX from 'xlsx-js-style'
 
 const authStore = useAuthStore()
 const loading = ref(true)
@@ -116,11 +117,460 @@ const formatDate = (dateString) => {
 const getTransactionLabel = (type) => {
   return transactionTypes[type] || type
 }
+
+const exporting = ref(false)
+
+// Helper function to apply cell styling
+const applyHeaderStyle = (cell) => {
+  cell.s = {
+    fill: { fgColor: { rgb: "4F46E5" } }, // Primary blue
+    font: { bold: true, color: { rgb: "FFFFFF" }, sz: 12 },
+    alignment: { horizontal: "center", vertical: "center" },
+    border: {
+      top: { style: "thin", color: { rgb: "000000" } },
+      bottom: { style: "thin", color: { rgb: "000000" } },
+      left: { style: "thin", color: { rgb: "000000" } },
+      right: { style: "thin", color: { rgb: "000000" } }
+    }
+  }
+  return cell
+}
+
+const applySectionHeaderStyle = (cell) => {
+  cell.s = {
+    fill: { fgColor: { rgb: "E0E7FF" } }, // Light blue
+    font: { bold: true, sz: 14 },
+    alignment: { horizontal: "right", vertical: "center" },
+    border: {
+      top: { style: "medium", color: { rgb: "4F46E5" } },
+      bottom: { style: "medium", color: { rgb: "4F46E5" } },
+      left: { style: "medium", color: { rgb: "4F46E5" } },
+      right: { style: "medium", color: { rgb: "4F46E5" } }
+    }
+  }
+  return cell
+}
+
+const applyDataCellStyle = (cell, isNumber = false, color = null) => {
+  cell.s = {
+    alignment: { horizontal: isNumber ? "right" : "right", vertical: "center" },
+    border: {
+      top: { style: "thin", color: { rgb: "D1D5DB" } },
+      bottom: { style: "thin", color: { rgb: "D1D5DB" } },
+      left: { style: "thin", color: { rgb: "D1D5DB" } },
+      right: { style: "thin", color: { rgb: "D1D5DB" } }
+    }
+  }
+  if (isNumber) {
+    cell.s.font = { bold: true }
+    if (color === 'green') {
+      cell.s.font.color = { rgb: "059669" } // Green-600
+    } else if (color === 'red') {
+      cell.s.font.color = { rgb: "DC2626" } // Red-600
+    }
+  }
+  return cell
+}
+
+// Helper function to set RTL (Right-to-Left) for individual sheets
+const setRTL = (ws) => {
+  // Set RTL view for this specific sheet
+  if (!ws['!views']) ws['!views'] = [{}]
+  ws['!views'][0] = { rtl: true }
+}
+
+// Export dashboard data to Excel with formatting
+const exportToExcel = () => {
+  try {
+    exporting.value = true
+    const wb = XLSX.utils.book_new()
+    
+    // Set workbook to RTL (Right-to-Left) for all sheets
+    if (!wb.Workbook) wb.Workbook = {}
+    if (!wb.Workbook.Views) wb.Workbook.Views = []
+    wb.Workbook.Views[0] = { RTL: true }
+    
+    // Financial Summary Sheet - Horizontal Layout with Colors
+    if (isWidgetVisible(widgetKeys.FINANCIAL_SUMMARY) && dashboardData.value?.summary) {
+      const ws = XLSX.utils.aoa_to_sheet([])
+      
+      // Title Row
+      XLSX.utils.sheet_add_aoa(ws, [['الملخص المالي']], { origin: 'A1' })
+      ws['A1'] = applySectionHeaderStyle(ws['A1'])
+      ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 11 } }]
+      
+      // Headers Row
+      const headers = ['إجمالي الرصيد', 'العملة', 'المبلغ', 'إجمالي المقبوضات', 'العملة', 'المبلغ', 'إجمالي المصروفات', 'العملة', 'المبلغ', 'إجمالي العهدة', 'العملة', 'المبلغ']
+      XLSX.utils.sheet_add_aoa(ws, [headers], { origin: 'A3' })
+      
+      // Apply header styles with colors
+      for (let col = 0; col < 12; col++) {
+        const cellRef = XLSX.utils.encode_cell({ r: 2, c: col })
+        ws[cellRef].s = {
+          fill: { 
+            fgColor: { 
+              rgb: col < 3 ? "10B981" : // Green for Balance
+                   col < 6 ? "3B82F6" : // Blue for Income
+                   col < 9 ? "EF4444" : // Red for Expenses
+                   "8B5CF6" // Purple for Custody
+            } 
+          },
+          font: { bold: true, color: { rgb: "FFFFFF" }, sz: 11 },
+          alignment: { horizontal: "center", vertical: "center" },
+          border: {
+            top: { style: "thin", color: { rgb: "000000" } },
+            bottom: { style: "thin", color: { rgb: "000000" } },
+            left: { style: "thin", color: { rgb: "000000" } },
+            right: { style: "thin", color: { rgb: "000000" } }
+          }
+        }
+      }
+      
+      // Data Row - collect all data
+      const balanceData = dashboardData.value.summary.total_balance || []
+      const incomeData = dashboardData.value.summary.total_income || []
+      const expensesData = dashboardData.value.summary.total_expenses || []
+      const custodyData = dashboardData.value.summary.total_custody || []
+      
+      // Create data rows (one row per currency if multiple)
+      const maxRows = Math.max(balanceData.length, incomeData.length, expensesData.length, custodyData.length)
+      
+      for (let i = 0; i < maxRows; i++) {
+        const row = [
+          '', // Balance label (merged)
+          balanceData[i]?.currency || '',
+          balanceData[i]?.amount || 0,
+          '', // Income label (merged)
+          incomeData[i]?.currency || '',
+          incomeData[i]?.amount || 0,
+          '', // Expenses label (merged)
+          expensesData[i]?.currency || '',
+          expensesData[i]?.amount || 0,
+          '', // Custody label (merged)
+          custodyData[i]?.currency || '',
+          custodyData[i]?.amount || 0
+        ]
+        
+        XLSX.utils.sheet_add_aoa(ws, [row], { origin: `A${i + 4}` })
+        
+        // Apply data cell styles with light background colors
+        for (let col = 0; col < 12; col++) {
+          const cellRef = XLSX.utils.encode_cell({ r: i + 3, c: col })
+          const isAmount = [2, 5, 8, 11].includes(col)
+          
+          ws[cellRef].s = {
+            fill: { 
+              fgColor: { 
+                rgb: col < 3 ? "D1FAE5" : // Light green for Balance
+                     col < 6 ? "DBEAFE" : // Light blue for Income
+                     col < 9 ? "FEE2E2" : // Light red for Expenses
+                     "EDE9FE" // Light purple for Custody
+              } 
+            },
+            font: { bold: isAmount, sz: 10 },
+            alignment: { horizontal: isAmount ? "right" : "center", vertical: "center" },
+            border: {
+              top: { style: "thin", color: { rgb: "D1D5DB" } },
+              bottom: { style: "thin", color: { rgb: "D1D5DB" } },
+              left: { style: "thin", color: { rgb: "D1D5DB" } },
+              right: { style: "thin", color: { rgb: "D1D5DB" } }
+            }
+          }
+        }
+      }
+      
+      // Set column widths
+      ws['!cols'] = [
+        { wch: 18 }, { wch: 10 }, { wch: 15 }, // Balance
+        { wch: 18 }, { wch: 10 }, { wch: 15 }, // Income
+        { wch: 18 }, { wch: 10 }, { wch: 15 }, // Expenses
+        { wch: 18 }, { wch: 10 }, { wch: 15 }  // Custody
+      ]
+      
+      // Set RTL for Arabic
+      setRTL(ws)
+      
+      XLSX.utils.book_append_sheet(wb, ws, 'الملخص المالي')
+    }
+    
+    // Bank Accounts Sheet
+    if (isWidgetVisible(widgetKeys.BANK_ACCOUNTS) && dashboardData.value?.bank_accounts?.length > 0) {
+      const ws = XLSX.utils.aoa_to_sheet([])
+      let rowIndex = 0
+      
+      // Title
+      XLSX.utils.sheet_add_aoa(ws, [['الموقف المصرفي']], { origin: 'A1' })
+      ws['A1'] = applySectionHeaderStyle(ws['A1'])
+      ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }]
+      rowIndex += 2
+      
+      dashboardData.value.bank_accounts.forEach((bank, idx) => {
+        // Bank header with separate columns
+        XLSX.utils.sheet_add_aoa(ws, [[
+          bank.container.bank_name_ar || bank.container.bank_name,
+          bank.container.account_number,
+          'الرصيد:',
+          bank.container.balance,
+          bank.container.currency
+        ]], { origin: `A${rowIndex + 1}` })
+        
+        // Style bank header cells
+        for (let col = 0; col < 5; col++) {
+          const cellRef = XLSX.utils.encode_cell({ r: rowIndex, c: col })
+          ws[cellRef] = applySectionHeaderStyle(ws[cellRef])
+        }
+        rowIndex++
+        
+        // Table headers
+        XLSX.utils.sheet_add_aoa(ws, [['التاريخ', 'البيان', 'القيمة', 'العملة']], { origin: `A${rowIndex + 1}` })
+        for (let col = 0; col < 4; col++) {
+          const cellRef = XLSX.utils.encode_cell({ r: rowIndex, c: col })
+          applyHeaderStyle(ws[cellRef])
+        }
+        rowIndex++
+        
+        // Transactions
+        bank.last_transactions?.forEach(tx => {
+          const isIncome = ['income_grant', 'income_donation'].includes(tx.type)
+          XLSX.utils.sheet_add_aoa(ws, [[
+            formatDate(tx.transaction_date),
+            tx.description_ar || tx.description,
+            tx.amount,
+            tx.currency
+          ]], { origin: `A${rowIndex + 1}` })
+          
+          for (let col = 0; col < 4; col++) {
+            const cellRef = XLSX.utils.encode_cell({ r: rowIndex, c: col })
+            applyDataCellStyle(ws[cellRef], col === 2, col === 2 ? (isIncome ? 'green' : 'red') : null)
+          }
+          rowIndex++
+        })
+        rowIndex++
+      })
+      
+      ws['!cols'] = [{ wch: 25 }, { wch: 20 }, { wch: 12 }, { wch: 15 }, { wch: 10 }]
+      
+      // Set RTL for Arabic
+      setRTL(ws)
+      
+      XLSX.utils.book_append_sheet(wb, ws, 'الموقف المصرفي')
+    }
+    
+    // Cash Accounts Sheet
+    if (isWidgetVisible(widgetKeys.CASH_ACCOUNTS) && dashboardData.value?.cash_accounts?.length > 0) {
+      const ws = XLSX.utils.aoa_to_sheet([])
+      let rowIndex = 0
+      
+      XLSX.utils.sheet_add_aoa(ws, [['الموقف النقدي']], { origin: 'A1' })
+      ws['A1'] = applySectionHeaderStyle(ws['A1'])
+      ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }]
+      rowIndex += 2
+      
+      dashboardData.value.cash_accounts.forEach(cash => {
+        // Cash header with separate columns
+        XLSX.utils.sheet_add_aoa(ws, [[
+          cash.container.name_ar || cash.container.name,
+          cash.container.location_ar || cash.container.location || '',
+          'الرصيد:',
+          cash.container.balance,
+          cash.container.currency
+        ]], { origin: `A${rowIndex + 1}` })
+        
+        // Style cash header cells
+        for (let col = 0; col < 5; col++) {
+          const cellRef = XLSX.utils.encode_cell({ r: rowIndex, c: col })
+          ws[cellRef] = applySectionHeaderStyle(ws[cellRef])
+        }
+        rowIndex++
+        
+        XLSX.utils.sheet_add_aoa(ws, [['التاريخ', 'البيان', 'القيمة', 'العملة']], { origin: `A${rowIndex + 1}` })
+        for (let col = 0; col < 4; col++) {
+          applyHeaderStyle(ws[XLSX.utils.encode_cell({ r: rowIndex, c: col })])
+        }
+        rowIndex++
+        
+        cash.last_transactions?.forEach(tx => {
+          const isIncome = ['income_grant', 'income_donation'].includes(tx.type)
+          XLSX.utils.sheet_add_aoa(ws, [[
+            formatDate(tx.transaction_date),
+            tx.description_ar || tx.description,
+            tx.amount,
+            tx.currency
+          ]], { origin: `A${rowIndex + 1}` })
+          
+          for (let col = 0; col < 4; col++) {
+            applyDataCellStyle(ws[XLSX.utils.encode_cell({ r: rowIndex, c: col })], col === 2, col === 2 ? (isIncome ? 'green' : 'red') : null)
+          }
+          rowIndex++
+        })
+        rowIndex++
+      })
+      
+      ws['!cols'] = [{ wch: 25 }, { wch: 20 }, { wch: 12 }, { wch: 15 }, { wch: 10 }]
+      
+      // Set RTL for Arabic
+      setRTL(ws)
+      
+      XLSX.utils.book_append_sheet(wb, ws, 'الموقف النقدي')
+    }
+    
+    // Projects Sheet
+    if (isWidgetVisible(widgetKeys.PROJECTS) && dashboardData.value?.projects?.length > 0) {
+      const ws = XLSX.utils.aoa_to_sheet([])
+      let rowIndex = 0
+      
+      XLSX.utils.sheet_add_aoa(ws, [['المشاريع']], { origin: 'A1' })
+      ws['A1'] = applySectionHeaderStyle(ws['A1'])
+      ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }]
+      rowIndex += 2
+      
+      dashboardData.value.projects.forEach(project => {
+        // Project header with separate columns
+        XLSX.utils.sheet_add_aoa(ws, [[
+          project.project.name_ar || project.project.name,
+          project.project.code,
+          'الميزانية:',
+          project.project.budget || 0,
+          project.project.currency
+        ]], { origin: `A${rowIndex + 1}` })
+        
+        // Style project header cells
+        for (let col = 0; col < 5; col++) {
+          const cellRef = XLSX.utils.encode_cell({ r: rowIndex, c: col })
+          ws[cellRef] = applySectionHeaderStyle(ws[cellRef])
+        }
+        rowIndex++
+        
+        XLSX.utils.sheet_add_aoa(ws, [['التاريخ', 'البيان', 'القيمة', 'العملة']], { origin: `A${rowIndex + 1}` })
+        for (let col = 0; col < 4; col++) {
+          applyHeaderStyle(ws[XLSX.utils.encode_cell({ r: rowIndex, c: col })])
+        }
+        rowIndex++
+        
+        project.last_transactions?.forEach(tx => {
+          const isIncome = ['income_grant', 'income_donation'].includes(tx.type)
+          XLSX.utils.sheet_add_aoa(ws, [[
+            formatDate(tx.transaction_date),
+            tx.description_ar || tx.description,
+            tx.amount,
+            tx.currency
+          ]], { origin: `A${rowIndex + 1}` })
+          
+          for (let col = 0; col < 4; col++) {
+            applyDataCellStyle(ws[XLSX.utils.encode_cell({ r: rowIndex, c: col })], col === 2, col === 2 ? (isIncome ? 'green' : 'red') : null)
+          }
+          rowIndex++
+        })
+        rowIndex++
+      })
+      
+      ws['!cols'] = [{ wch: 30 }, { wch: 15 }, { wch: 12 }, { wch: 15 }, { wch: 10 }]
+      
+      // Set RTL for Arabic
+      setRTL(ws)
+      
+      XLSX.utils.book_append_sheet(wb, ws, 'المشاريع')
+    }
+    
+    // Recent Income Sheet
+    if (isWidgetVisible(widgetKeys.RECENT_INCOME) && dashboardData.value?.recent_income?.length > 0) {
+      const ws = XLSX.utils.aoa_to_sheet([])
+      
+      XLSX.utils.sheet_add_aoa(ws, [['آخر المقبوضات']], { origin: 'A1' })
+      ws['A1'] = applySectionHeaderStyle(ws['A1'])
+      ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }]
+      
+      XLSX.utils.sheet_add_aoa(ws, [['التاريخ', 'البيان', 'الحساب', 'القيمة', 'العملة']], { origin: 'A3' })
+      for (let col = 0; col < 5; col++) {
+        applyHeaderStyle(ws[XLSX.utils.encode_cell({ r: 2, c: col })])
+      }
+      
+      dashboardData.value.recent_income.forEach((tx, idx) => {
+        XLSX.utils.sheet_add_aoa(ws, [[
+          formatDate(tx.transaction_date),
+          tx.description_ar || tx.description,
+          tx.container_name,
+          tx.amount,
+          tx.currency
+        ]], { origin: `A${idx + 4}` })
+        
+        for (let col = 0; col < 5; col++) {
+          applyDataCellStyle(ws[XLSX.utils.encode_cell({ r: idx + 3, c: col })], col === 3, col === 3 ? 'green' : null)
+        }
+      })
+      
+      ws['!cols'] = [{ wch: 15 }, { wch: 35 }, { wch: 20 }, { wch: 15 }, { wch: 10 }]
+      
+      // Set RTL for Arabic
+      setRTL(ws)
+      
+      XLSX.utils.book_append_sheet(wb, ws, 'آخر المقبوضات')
+    }
+    
+    // Recent Expenses Sheet
+    if (isWidgetVisible(widgetKeys.RECENT_EXPENSES) && dashboardData.value?.recent_expenses?.length > 0) {
+      const ws = XLSX.utils.aoa_to_sheet([])
+      
+      XLSX.utils.sheet_add_aoa(ws, [['آخر المصروفات']], { origin: 'A1' })
+      ws['A1'] = applySectionHeaderStyle(ws['A1'])
+      ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }]
+      
+      XLSX.utils.sheet_add_aoa(ws, [['التاريخ', 'البيان', 'الحساب', 'القيمة', 'العملة']], { origin: 'A3' })
+      for (let col = 0; col < 5; col++) {
+        applyHeaderStyle(ws[XLSX.utils.encode_cell({ r: 2, c: col })])
+      }
+      
+      dashboardData.value.recent_expenses.forEach((tx, idx) => {
+        XLSX.utils.sheet_add_aoa(ws, [[
+          formatDate(tx.transaction_date),
+          tx.description_ar || tx.description,
+          tx.container_name,
+          tx.amount,
+          tx.currency
+        ]], { origin: `A${idx + 4}` })
+        
+        for (let col = 0; col < 5; col++) {
+          applyDataCellStyle(ws[XLSX.utils.encode_cell({ r: idx + 3, c: col })], col === 3, col === 3 ? 'red' : null)
+        }
+      })
+      
+      ws['!cols'] = [{ wch: 15 }, { wch: 35 }, { wch: 20 }, { wch: 15 }, { wch: 10 }]
+      
+      // Set RTL for Arabic
+      setRTL(ws)
+      
+      XLSX.utils.book_append_sheet(wb, ws, 'آخر المصروفات')
+    }
+    
+    // Generate filename with current date
+    const filename = `لوحة_التحكم_${format(new Date(), 'yyyy-MM-dd_HH-mm')}.xlsx`
+    
+    // Write file
+    XLSX.writeFile(wb, filename)
+    
+  } catch (err) {
+    console.error('Failed to export to Excel:', err)
+    alert('فشل تصدير البيانات إلى Excel')
+  } finally {
+    exporting.value = false
+  }
+}
 </script>
 
 <template>
   <div class="p-6">
-    <h1 class="text-3xl font-bold mb-8 text-gray-800">لوحة التحكم</h1>
+    <div class="flex justify-between items-center mb-8">
+      <h1 class="text-3xl font-bold text-gray-800">لوحة التحكم</h1>
+      <button 
+        @click="exportToExcel" 
+        :disabled="exporting || loading"
+        class="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        <span v-if="exporting" class="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"></span>
+        <span v-else>📊</span>
+        <span>تصدير إلى Excel</span>
+      </button>
+    </div>
 
     <!-- Loading State -->
     <div v-if="loading" class="flex justify-center items-center h-64">
