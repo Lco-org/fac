@@ -433,9 +433,17 @@ const confirmDelete = async (container) => {
 }
 
 const formatCurrency = (amount, currency) => {
-  return new Intl.NumberFormat('ar-LY', {
+  const code = currency || 'LYD'
+  let locale = 'ar-LY'
+  
+  // Use specific locales for foreign currencies to ensure correct symbols
+  if (code === 'USD') locale = 'en-US'
+  if (code === 'EUR') locale = 'en-IE'
+  if (code === 'GBP') locale = 'en-GB'
+
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
-    currency: currency
+    currency: code
   }).format(amount)
 }
 

@@ -275,6 +275,14 @@ type UpdateWidgetConfigRequest struct {
 	AllowedRoles []string `json:"allowed_roles,omitempty"`
 	DisplayOrder *int     `json:"display_order,omitempty"`
 }
+
+// DailyPosition represents financial containers grouped by type
+type DailyPosition struct {
+	CashContainers []FinancialContainer `json:"cash_containers"`
+	BankContainers []FinancialContainer `json:"bank_containers"`
+	GeneratedAt    time.Time            `json:"generated_at"`
+}
+
 type ProjectTransactionDetail struct {
 	ID                uuid.UUID       `json:"id"`
 	TransactionNumber string          `json:"transaction_number"`

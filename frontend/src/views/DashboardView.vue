@@ -35,10 +35,24 @@ onMounted(async () => {
 })
 
 const formatCurrency = (amount, currency) => {
-  return new Intl.NumberFormat('ar-LY', {
-    style: 'currency',
-    currency: currency || 'LYD'
-  }).format(amount)
+  console.log(`Formatting: ${amount} | Currency: '${currency}'`)
+  const code = (currency || 'LYD').trim().toUpperCase()
+  let locale = 'ar-LY'
+  
+  // Use specific locales for foreign currencies to ensure correct symbols
+  if (code === 'USD') locale = 'en-US'
+  if (code === 'EUR') locale = 'en-IE'
+  if (code === 'GBP') locale = 'en-GB'
+  
+  try {
+    return new Intl.NumberFormat(locale, {
+      style: 'currency',
+      currency: code
+    }).format(amount)
+  } catch (e) {
+    console.error('Currency formatting error:', e)
+    return `${amount} ${code}`
+  }
 }
 
 const formatDate = (dateString) => {

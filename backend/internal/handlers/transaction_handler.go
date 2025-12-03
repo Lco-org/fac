@@ -4,7 +4,6 @@ import (
 	"cso-erp/internal/middleware"
 	"cso-erp/internal/models"
 	"cso-erp/internal/services"
-	"fmt"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -24,9 +23,6 @@ func NewTransactionHandler(transactionService *services.TransactionService) *Tra
 func (h *TransactionHandler) CreateTransaction(c *fiber.Ctx) error {
 	var req models.CreateTransactionRequest
 	if err := c.BodyParser(&req); err != nil {
-		// Debug: print the error and body
-		fmt.Printf("❌ Body parse error: %v\n", err)
-		fmt.Printf("📦 Received body: %s\n", string(c.Body()))
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error":   "Invalid request body",
 			"details": err.Error(),

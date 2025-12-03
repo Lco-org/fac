@@ -104,6 +104,8 @@ func (s *ReportService) GetDashboardSummary(ctx context.Context, userRole string
 					log.Printf("ERROR: Failed to scan transaction: %v", err)
 					return nil, err
 				}
+				// Strict currency enforcement: Always use container currency for display in this context
+				td.Currency = c.Currency
 				transactions = append(transactions, td)
 			}
 			log.Printf("DEBUG: Bank %s has %d transactions", c.Name, len(transactions))
@@ -173,6 +175,8 @@ func (s *ReportService) GetDashboardSummary(ctx context.Context, userRole string
 					log.Printf("ERROR: Failed to scan project transaction: %v", err)
 					return nil, err
 				}
+				// Strict currency enforcement: Always use project currency for display
+				ptd.Currency = p.Currency
 				transactions = append(transactions, ptd)
 			}
 			log.Printf("DEBUG: Project %s has %d transactions", p.Name, len(transactions))
@@ -192,7 +196,7 @@ func (s *ReportService) GetDashboardSummary(ctx context.Context, userRole string
 		SELECT t.id, t.transaction_number, t.type, t.amount, t.currency,
 		       t.description, t.description_ar, t.payee_payer,
 		       COALESCE(p.code, ''), COALESCE(p.name, ''),
-		       fc.name, fc.type, t.transaction_date, t.created_at
+		       fc.name, fc.type, fc.currency, t.transaction_date, t.created_at
 		FROM transactions t
 		LEFT JOIN projects p ON t.project_id = p.id
 		JOIN financial_containers fc ON t.container_id = fc.id
@@ -208,16 +212,19 @@ func (s *ReportService) GetDashboardSummary(ctx context.Context, userRole string
 
 		for incomeRows.Next() {
 			var ptd models.ProjectTransactionDetail
+			var containerCurrency models.CurrencyCode
 			err := incomeRows.Scan(
 				&ptd.ID, &ptd.TransactionNumber, &ptd.Type, &ptd.Amount, &ptd.Currency,
 				&ptd.Description, &ptd.DescriptionAr, &ptd.PayeePayer,
 				&ptd.ProjectCode, &ptd.ProjectName,
-				&ptd.ContainerName, &ptd.ContainerType, &ptd.TransactionDate, &ptd.CreatedAt,
+				&ptd.ContainerName, &ptd.ContainerType, &containerCurrency, &ptd.TransactionDate, &ptd.CreatedAt,
 			)
 			if err != nil {
 				log.Printf("ERROR: Failed to scan income transaction: %v", err)
 				return nil, err
 			}
+			// Strict currency enforcement
+			ptd.Currency = containerCurrency
 			recentIncome = append(recentIncome, ptd)
 		}
 		log.Printf("DEBUG: Fetched %d recent income transactions", len(recentIncome))
@@ -230,7 +237,7 @@ func (s *ReportService) GetDashboardSummary(ctx context.Context, userRole string
 		SELECT t.id, t.transaction_number, t.type, t.amount, t.currency,
 		       t.description, t.description_ar, t.payee_payer,
 		       COALESCE(p.code, ''), COALESCE(p.name, ''),
-		       fc.name, fc.type, t.transaction_date, t.created_at
+		       fc.name, fc.type, fc.currency, t.transaction_date, t.created_at
 		FROM transactions t
 		LEFT JOIN projects p ON t.project_id = p.id
 		JOIN financial_containers fc ON t.container_id = fc.id
@@ -246,16 +253,19 @@ func (s *ReportService) GetDashboardSummary(ctx context.Context, userRole string
 
 		for expenseRows.Next() {
 			var ptd models.ProjectTransactionDetail
+			var containerCurrency models.CurrencyCode
 			err := expenseRows.Scan(
 				&ptd.ID, &ptd.TransactionNumber, &ptd.Type, &ptd.Amount, &ptd.Currency,
 				&ptd.Description, &ptd.DescriptionAr, &ptd.PayeePayer,
 				&ptd.ProjectCode, &ptd.ProjectName,
-				&ptd.ContainerName, &ptd.ContainerType, &ptd.TransactionDate, &ptd.CreatedAt,
+				&ptd.ContainerName, &ptd.ContainerType, &containerCurrency, &ptd.TransactionDate, &ptd.CreatedAt,
 			)
 			if err != nil {
 				log.Printf("ERROR: Failed to scan expense transaction: %v", err)
 				return nil, err
 			}
+			// Strict currency enforcement
+			ptd.Currency = containerCurrency
 			recentExpenses = append(recentExpenses, ptd)
 		}
 		log.Printf("DEBUG: Fetched %d recent expense transactions", len(recentExpenses))
@@ -471,4 +481,89 @@ func (s *ReportService) GetProjectStatement(ctx context.Context, projectID strin
 	}
 
 	return statement, nil
+}
+
+// GetDailyPosition returns financial containers grouped by type (cash/bank)
+func (s *ReportService) GetDailyPosition(ctx context.Context) (*models.DailyPosition, error) {
+	log.Println("DEBUG: Fetching daily position...")
+
+	// Get all active containers
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, name, name_ar, type, currency, balance, bank_name, bank_name_ar,
+		       account_number, iban, location, location_ar, is_active, created_at
+		FROM financial_containers
+		WHERE is_active = true
+		ORDER BY type, name
+	`)
+	if err != nil {
+		log.Printf("ERROR: Failed to fetch containers: %v", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	cashContainers := make([]models.FinancialContainer, 0)
+	bankContainers := make([]models.FinancialContainer, 0)
+
+	for rows.Next() {
+		var c models.FinancialContainer
+		err := rows.Scan(
+			&c.ID, &c.Name, &c.NameAr, &c.Type, &c.Currency,
+			&c.Balance, &c.BankName, &c.BankNameAr, &c.AccountNumber,
+			&c.IBAN, &c.Location, &c.LocationAr, &c.IsActive, &c.CreatedAt,
+		)
+		if err != nil {
+			log.Printf("ERROR: Failed to scan container: %v", err)
+			return nil, err
+		}
+
+		if c.Type == "cash" {
+			cashContainers = append(cashContainers, c)
+		} else if c.Type == "bank" {
+			bankContainers = append(bankContainers, c)
+		}
+	}
+
+	log.Printf("DEBUG: Found %d cash containers and %d bank containers", len(cashContainers), len(bankContainers))
+
+	return &models.DailyPosition{
+		CashContainers: cashContainers,
+		BankContainers: bankContainers,
+		GeneratedAt:    time.Now(),
+	}, nil
+}
+
+// GetProjectSummary returns a list of all active projects
+func (s *ReportService) GetProjectSummary(ctx context.Context) ([]models.Project, error) {
+	log.Println("DEBUG: Fetching project summary...")
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, code, name, name_ar, description, donor_name, donor_name_ar,
+		       start_date, end_date, budget, currency, is_active, created_at
+		FROM projects
+		WHERE is_active = true
+		ORDER BY code, name
+	`)
+	if err != nil {
+		log.Printf("ERROR: Failed to fetch projects: %v", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	projects := make([]models.Project, 0)
+	for rows.Next() {
+		var p models.Project
+		err := rows.Scan(
+			&p.ID, &p.Code, &p.Name, &p.NameAr, &p.Description,
+			&p.DonorName, &p.DonorNameAr, &p.StartDate, &p.EndDate,
+			&p.Budget, &p.Currency, &p.IsActive, &p.CreatedAt,
+		)
+		if err != nil {
+			log.Printf("ERROR: Failed to scan project: %v", err)
+			return nil, err
+		}
+		projects = append(projects, p)
+	}
+
+	log.Printf("DEBUG: Found %d active projects", len(projects))
+	return projects, nil
 }

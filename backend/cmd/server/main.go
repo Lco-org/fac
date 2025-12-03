@@ -126,6 +126,8 @@ func main() {
 	reports.Get("/dashboard", middleware.RequireAnyAuthenticated(), reportHandler.GetDashboardSummary)
 	reports.Get("/containers/:id/statement", middleware.RequireAnyAuthenticated(), reportHandler.GetContainerStatement)
 	reports.Get("/projects/:id/statement", middleware.RequireAnyAuthenticated(), reportHandler.GetProjectStatement)
+	reports.Get("/daily-position", middleware.RequireAnyAuthenticated(), reportHandler.GetDailyPosition)
+	reports.Get("/project-summary", middleware.RequireAnyAuthenticated(), reportHandler.GetProjectSummary)
 
 	// Admin-only project management routes
 	projects := protected.Group("/projects", middleware.RequireRole(models.RoleAdmin))
