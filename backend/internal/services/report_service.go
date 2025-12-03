@@ -39,13 +39,15 @@ func (s *ReportService) GetDashboardSummary(ctx context.Context, userRole string
 
 	log.Printf("DEBUG: Widget map: %v", widgetMap)
 
-	var bankSummaries []models.BankDashboardSummary
-	var projectSummaries []models.ProjectDashboardSummary
-	var recentIncome []models.ProjectTransactionDetail
-	var recentExpenses []models.ProjectTransactionDetail
+	// Initialize slices with empty arrays to ensure JSON returns [] instead of null
+	bankSummaries := make([]models.BankDashboardSummary, 0)
+	projectSummaries := make([]models.ProjectDashboardSummary, 0)
+	recentIncome := make([]models.ProjectTransactionDetail, 0)
+	recentExpenses := make([]models.ProjectTransactionDetail, 0)
 
 	// 1. Get all active bank containers (if banks widget is visible)
 	if widgetMap["banks"] {
+		log.Println("DEBUG: Fetching bank accounts...")
 		rows, err := s.db.QueryContext(ctx, `
 		SELECT id, name, name_ar, type, currency, balance, bank_name, bank_name_ar, 
 		       account_number, iban, location, location_ar, is_active, created_at
@@ -54,11 +56,10 @@ func (s *ReportService) GetDashboardSummary(ctx context.Context, userRole string
 		ORDER BY name
 	`)
 		if err != nil {
+			log.Printf("ERROR: Failed to fetch bank accounts: %v", err)
 			return nil, err
 		}
 		defer rows.Close()
-
-		var bankSummaries []models.BankDashboardSummary
 
 		for rows.Next() {
 			var c models.FinancialContainer
@@ -68,6 +69,7 @@ func (s *ReportService) GetDashboardSummary(ctx context.Context, userRole string
 				&c.IBAN, &c.Location, &c.LocationAr, &c.IsActive, &c.CreatedAt,
 			)
 			if err != nil {
+				log.Printf("ERROR: Failed to scan bank account: %v", err)
 				return nil, err
 			}
 
@@ -84,11 +86,12 @@ func (s *ReportService) GetDashboardSummary(ctx context.Context, userRole string
 			LIMIT 3
 		`, c.ID)
 			if err != nil {
+				log.Printf("ERROR: Failed to fetch transactions for bank %s: %v", c.ID, err)
 				return nil, err
 			}
 			defer txRows.Close()
 
-			var transactions []models.TransactionDetail
+			transactions := make([]models.TransactionDetail, 0)
 			for txRows.Next() {
 				var td models.TransactionDetail
 				err := txRows.Scan(
@@ -98,20 +101,24 @@ func (s *ReportService) GetDashboardSummary(ctx context.Context, userRole string
 					&td.TransactionDate, &td.CreatedAt,
 				)
 				if err != nil {
+					log.Printf("ERROR: Failed to scan transaction: %v", err)
 					return nil, err
 				}
 				transactions = append(transactions, td)
 			}
+			log.Printf("DEBUG: Bank %s has %d transactions", c.Name, len(transactions))
 
 			bankSummaries = append(bankSummaries, models.BankDashboardSummary{
 				Container:        c,
 				LastTransactions: transactions,
 			})
 		}
+		log.Printf("DEBUG: Fetched %d bank accounts", len(bankSummaries))
 	}
 
 	// 3. Get active projects with last 3 transactions (if projects widget is visible)
 	if widgetMap["projects"] {
+		log.Println("DEBUG: Fetching projects...")
 		projectRows, err := s.db.QueryContext(ctx, `
 		SELECT id, code, name, name_ar, description, donor_name, donor_name_ar,
 		       start_date, end_date, budget, currency, is_active, created_at
@@ -120,11 +127,10 @@ func (s *ReportService) GetDashboardSummary(ctx context.Context, userRole string
 		ORDER BY name
 	`)
 		if err != nil {
+			log.Printf("ERROR: Failed to fetch projects: %v", err)
 			return nil, err
 		}
 		defer projectRows.Close()
-
-		var projectSummaries []models.ProjectDashboardSummary
 
 		for projectRows.Next() {
 			var p models.Project
@@ -134,6 +140,7 @@ func (s *ReportService) GetDashboardSummary(ctx context.Context, userRole string
 				&p.Budget, &p.Currency, &p.IsActive, &p.CreatedAt,
 			)
 			if err != nil {
+				log.Printf("ERROR: Failed to scan project: %v", err)
 				return nil, err
 			}
 
@@ -149,11 +156,12 @@ func (s *ReportService) GetDashboardSummary(ctx context.Context, userRole string
 			LIMIT 3
 		`, p.ID)
 			if err != nil {
+				log.Printf("ERROR: Failed to fetch transactions for project %s: %v", p.ID, err)
 				return nil, err
 			}
 			defer ptxRows.Close()
 
-			var transactions []models.ProjectTransactionDetail
+			transactions := make([]models.ProjectTransactionDetail, 0)
 			for ptxRows.Next() {
 				var ptd models.ProjectTransactionDetail
 				err := ptxRows.Scan(
@@ -162,20 +170,24 @@ func (s *ReportService) GetDashboardSummary(ctx context.Context, userRole string
 					&ptd.ContainerName, &ptd.ContainerType, &ptd.TransactionDate, &ptd.CreatedAt,
 				)
 				if err != nil {
+					log.Printf("ERROR: Failed to scan project transaction: %v", err)
 					return nil, err
 				}
 				transactions = append(transactions, ptd)
 			}
+			log.Printf("DEBUG: Project %s has %d transactions", p.Name, len(transactions))
 
 			projectSummaries = append(projectSummaries, models.ProjectDashboardSummary{
 				Project:          p,
 				LastTransactions: transactions,
 			})
 		}
+		log.Printf("DEBUG: Fetched %d projects", len(projectSummaries))
 	}
 
 	// 4. Get recent income (global) - if recent_income widget is visible
 	if widgetMap["recent_income"] {
+		log.Println("DEBUG: Fetching recent income...")
 		incomeRows, err := s.db.QueryContext(ctx, `
 		SELECT t.id, t.transaction_number, t.type, t.amount, t.currency,
 		       t.description, t.description_ar, t.payee_payer,
@@ -189,11 +201,11 @@ func (s *ReportService) GetDashboardSummary(ctx context.Context, userRole string
 		LIMIT 3
 	`)
 		if err != nil {
+			log.Printf("ERROR: Failed to fetch recent income: %v", err)
 			return nil, err
 		}
 		defer incomeRows.Close()
 
-		var recentIncome []models.ProjectTransactionDetail
 		for incomeRows.Next() {
 			var ptd models.ProjectTransactionDetail
 			err := incomeRows.Scan(
@@ -203,14 +215,17 @@ func (s *ReportService) GetDashboardSummary(ctx context.Context, userRole string
 				&ptd.ContainerName, &ptd.ContainerType, &ptd.TransactionDate, &ptd.CreatedAt,
 			)
 			if err != nil {
+				log.Printf("ERROR: Failed to scan income transaction: %v", err)
 				return nil, err
 			}
 			recentIncome = append(recentIncome, ptd)
 		}
+		log.Printf("DEBUG: Fetched %d recent income transactions", len(recentIncome))
 	}
 
 	// 5. Get recent expenses (global) - if recent_expenses widget is visible
 	if widgetMap["recent_expenses"] {
+		log.Println("DEBUG: Fetching recent expenses...")
 		expenseRows, err := s.db.QueryContext(ctx, `
 		SELECT t.id, t.transaction_number, t.type, t.amount, t.currency,
 		       t.description, t.description_ar, t.payee_payer,
@@ -219,16 +234,16 @@ func (s *ReportService) GetDashboardSummary(ctx context.Context, userRole string
 		FROM transactions t
 		LEFT JOIN projects p ON t.project_id = p.id
 		JOIN financial_containers fc ON t.container_id = fc.id
-		WHERE t.type LIKE 'disbursement_%' AND t.status = 'completed'
+		WHERE t.type::text LIKE 'disbursement_%' AND t.status = 'completed'
 		ORDER BY t.transaction_date DESC, t.created_at DESC
 		LIMIT 3
 	`)
 		if err != nil {
+			log.Printf("ERROR: Failed to fetch recent expenses: %v", err)
 			return nil, err
 		}
 		defer expenseRows.Close()
 
-		var recentExpenses []models.ProjectTransactionDetail
 		for expenseRows.Next() {
 			var ptd models.ProjectTransactionDetail
 			err := expenseRows.Scan(
@@ -238,10 +253,12 @@ func (s *ReportService) GetDashboardSummary(ctx context.Context, userRole string
 				&ptd.ContainerName, &ptd.ContainerType, &ptd.TransactionDate, &ptd.CreatedAt,
 			)
 			if err != nil {
+				log.Printf("ERROR: Failed to scan expense transaction: %v", err)
 				return nil, err
 			}
 			recentExpenses = append(recentExpenses, ptd)
 		}
+		log.Printf("DEBUG: Fetched %d recent expense transactions", len(recentExpenses))
 	}
 
 	return &models.DashboardSummary{
