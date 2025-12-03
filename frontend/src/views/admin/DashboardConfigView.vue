@@ -38,8 +38,6 @@ const saveWidget = async (widget) => {
       allowed_roles: widget.allowed_roles,
       display_order: parseInt(widget.display_order)
     })
-    // Show success feedback (could be a toast)
-    console.log('Widget saved successfully')
   } catch (err) {
     console.error('Failed to save widget:', err)
     alert('فشل حفظ التغييرات')

@@ -26,7 +26,6 @@ onMounted(async () => {
     loading.value = true
     const response = await api.get('/reports/dashboard')
     dashboardData.value = response.data
-    console.log('Dashboard Data Loaded:', dashboardData.value)
   } catch (err) {
     console.error('Failed to load dashboard data:', err)
     error.value = 'فشل تحميل بيانات لوحة التحكم. يرجى المحاولة مرة أخرى.'
