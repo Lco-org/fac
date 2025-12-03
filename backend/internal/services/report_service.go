@@ -118,6 +118,80 @@ func (s *ReportService) GetDashboardSummary(ctx context.Context, userRole string
 		log.Printf("DEBUG: Fetched %d bank accounts", len(bankSummaries))
 	}
 
+	// 2. Get all active cash containers (if cash_accounts widget is visible)
+	cashSummaries := make([]models.BankDashboardSummary, 0)
+	if widgetMap["cash_accounts"] {
+		log.Println("DEBUG: Fetching cash accounts...")
+		rows, err := s.db.QueryContext(ctx, `
+		SELECT id, name, name_ar, type, currency, balance, bank_name, bank_name_ar, 
+		       account_number, iban, location, location_ar, is_active, created_at
+		FROM financial_containers
+		WHERE type = 'cash' AND is_active = true
+		ORDER BY name
+	`)
+		if err != nil {
+			log.Printf("ERROR: Failed to fetch cash accounts: %v", err)
+			return nil, err
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var c models.FinancialContainer
+			err := rows.Scan(
+				&c.ID, &c.Name, &c.NameAr, &c.Type, &c.Currency,
+				&c.Balance, &c.BankName, &c.BankNameAr, &c.AccountNumber,
+				&c.IBAN, &c.Location, &c.LocationAr, &c.IsActive, &c.CreatedAt,
+			)
+			if err != nil {
+				log.Printf("ERROR: Failed to scan cash account: %v", err)
+				return nil, err
+			}
+
+			// For each cash account, get last 3 transactions
+			txRows, err := s.db.QueryContext(ctx, `
+			SELECT t.id, t.transaction_number, t.type, t.amount, t.currency, 
+			       t.description, t.description_ar, t.payee_payer,
+			       COALESCE(p.code, ''), COALESCE(p.name, ''), t.balance_before, t.balance_after,
+			       t.transaction_date, t.created_at
+			FROM transactions t
+			LEFT JOIN projects p ON t.project_id = p.id
+			WHERE t.container_id = $1 AND t.status = 'completed'
+			ORDER BY t.transaction_date DESC, t.created_at DESC
+			LIMIT 3
+		`, c.ID)
+			if err != nil {
+				log.Printf("ERROR: Failed to fetch transactions for cash %s: %v", c.ID, err)
+				return nil, err
+			}
+			defer txRows.Close()
+
+			transactions := make([]models.TransactionDetail, 0)
+			for txRows.Next() {
+				var td models.TransactionDetail
+				err := txRows.Scan(
+					&td.ID, &td.TransactionNumber, &td.Type, &td.Amount, &td.Currency,
+					&td.Description, &td.DescriptionAr, &td.PayeePayer,
+					&td.ProjectCode, &td.ProjectName, &td.BalanceBefore, &td.BalanceAfter,
+					&td.TransactionDate, &td.CreatedAt,
+				)
+				if err != nil {
+					log.Printf("ERROR: Failed to scan transaction: %v", err)
+					return nil, err
+				}
+				// Strict currency enforcement: Always use container currency for display
+				td.Currency = c.Currency
+				transactions = append(transactions, td)
+			}
+			log.Printf("DEBUG: Cash %s has %d transactions", c.Name, len(transactions))
+
+			cashSummaries = append(cashSummaries, models.BankDashboardSummary{
+				Container:        c,
+				LastTransactions: transactions,
+			})
+		}
+		log.Printf("DEBUG: Fetched %d cash accounts", len(cashSummaries))
+	}
+
 	// 3. Get active projects with last 3 transactions (if projects widget is visible)
 	if widgetMap["projects"] {
 		log.Println("DEBUG: Fetching projects...")
@@ -271,13 +345,153 @@ func (s *ReportService) GetDashboardSummary(ctx context.Context, userRole string
 		log.Printf("DEBUG: Fetched %d recent expense transactions", len(recentExpenses))
 	}
 
+	// Calculate financial summary (only if financial_summary widget is visible)
+	var summary models.FinancialSummary
+	if widgetMap["financial_summary"] {
+		var err error
+		summary, err = s.calculateFinancialSummary(ctx)
+		if err != nil {
+			log.Printf("ERROR: Failed to calculate financial summary: %v", err)
+			// Return empty summary instead of failing the entire request
+			summary = models.FinancialSummary{
+				TotalBalance:  make([]models.CurrencyAmount, 0),
+				TotalIncome:   make([]models.CurrencyAmount, 0),
+				TotalExpenses: make([]models.CurrencyAmount, 0),
+				TotalCustody:  make([]models.CurrencyAmount, 0),
+			}
+		}
+	} else {
+		// Widget not visible, return empty summary
+		summary = models.FinancialSummary{
+			TotalBalance:  make([]models.CurrencyAmount, 0),
+			TotalIncome:   make([]models.CurrencyAmount, 0),
+			TotalExpenses: make([]models.CurrencyAmount, 0),
+			TotalCustody:  make([]models.CurrencyAmount, 0),
+		}
+	}
+
 	return &models.DashboardSummary{
+		Summary:        summary,
 		BankAccounts:   bankSummaries,
+		CashAccounts:   cashSummaries,
 		Projects:       projectSummaries,
 		RecentIncome:   recentIncome,
 		RecentExpenses: recentExpenses,
 		GeneratedAt:    time.Now(),
 	}, nil
+}
+
+// calculateFinancialSummary calculates organization-wide financial totals grouped by currency
+func (s *ReportService) calculateFinancialSummary(ctx context.Context) (models.FinancialSummary, error) {
+	summary := models.FinancialSummary{
+		TotalBalance:  make([]models.CurrencyAmount, 0),
+		TotalIncome:   make([]models.CurrencyAmount, 0),
+		TotalExpenses: make([]models.CurrencyAmount, 0),
+		TotalCustody:  make([]models.CurrencyAmount, 0),
+	}
+
+	// 1. Calculate total balance by currency
+	balanceRows, err := s.db.QueryContext(ctx, `
+		SELECT currency, SUM(balance) as total
+		FROM financial_containers
+		WHERE is_active = true
+		GROUP BY currency
+		ORDER BY currency
+	`)
+	if err != nil {
+		log.Printf("ERROR: Failed to calculate total balance: %v", err)
+		return summary, err
+	}
+	defer balanceRows.Close()
+
+	for balanceRows.Next() {
+		var ca models.CurrencyAmount
+		if err := balanceRows.Scan(&ca.Currency, &ca.Amount); err != nil {
+			log.Printf("ERROR: Failed to scan balance: %v", err)
+			continue
+		}
+		summary.TotalBalance = append(summary.TotalBalance, ca)
+	}
+
+	// 2. Calculate total income by currency (using container currency)
+	incomeRows, err := s.db.QueryContext(ctx, `
+		SELECT fc.currency, SUM(t.amount) as total
+		FROM transactions t
+		JOIN financial_containers fc ON t.container_id = fc.id
+		WHERE t.type IN ('income_grant', 'income_donation') 
+		  AND t.status = 'completed'
+		GROUP BY fc.currency
+		ORDER BY fc.currency
+	`)
+	if err != nil {
+		log.Printf("ERROR: Failed to calculate total income: %v", err)
+		return summary, err
+	}
+	defer incomeRows.Close()
+
+	for incomeRows.Next() {
+		var ca models.CurrencyAmount
+		if err := incomeRows.Scan(&ca.Currency, &ca.Amount); err != nil {
+			log.Printf("ERROR: Failed to scan income: %v", err)
+			continue
+		}
+		summary.TotalIncome = append(summary.TotalIncome, ca)
+	}
+
+	// 3. Calculate total expenses by currency (using container currency)
+	expenseRows, err := s.db.QueryContext(ctx, `
+		SELECT fc.currency, SUM(t.amount) as total
+		FROM transactions t
+		JOIN financial_containers fc ON t.container_id = fc.id
+		WHERE t.type::text LIKE 'disbursement_%' 
+		  AND t.status = 'completed'
+		GROUP BY fc.currency
+		ORDER BY fc.currency
+	`)
+	if err != nil {
+		log.Printf("ERROR: Failed to calculate total expenses: %v", err)
+		return summary, err
+	}
+	defer expenseRows.Close()
+
+	for expenseRows.Next() {
+		var ca models.CurrencyAmount
+		if err := expenseRows.Scan(&ca.Currency, &ca.Amount); err != nil {
+			log.Printf("ERROR: Failed to scan expenses: %v", err)
+			continue
+		}
+		summary.TotalExpenses = append(summary.TotalExpenses, ca)
+	}
+
+	// 4. Calculate total custody by currency (using container currency)
+	custodyRows, err := s.db.QueryContext(ctx, `
+		SELECT fc.currency, SUM(t.amount) as total
+		FROM transactions t
+		JOIN financial_containers fc ON t.container_id = fc.id
+		WHERE t.type = 'disbursement_custody' 
+		  AND t.status = 'completed'
+		GROUP BY fc.currency
+		ORDER BY fc.currency
+	`)
+	if err != nil {
+		log.Printf("ERROR: Failed to calculate total custody: %v", err)
+		return summary, err
+	}
+	defer custodyRows.Close()
+
+	for custodyRows.Next() {
+		var ca models.CurrencyAmount
+		if err := custodyRows.Scan(&ca.Currency, &ca.Amount); err != nil {
+			log.Printf("ERROR: Failed to scan custody: %v", err)
+			continue
+		}
+		summary.TotalCustody = append(summary.TotalCustody, ca)
+	}
+
+	log.Printf("DEBUG: Financial summary calculated - Balance: %d currencies, Income: %d, Expenses: %d, Custody: %d",
+		len(summary.TotalBalance), len(summary.TotalIncome), len(summary.TotalExpenses), len(summary.TotalCustody))
+
+	return summary, nil
 }
 
 // GetContainerStatement retrieves detailed financial statement for a specific container

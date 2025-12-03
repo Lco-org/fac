@@ -239,7 +239,9 @@ type ProjectStatementSummary struct {
 }
 
 type DashboardSummary struct {
+	Summary        FinancialSummary           `json:"summary"`
 	BankAccounts   []BankDashboardSummary     `json:"bank_accounts"`
+	CashAccounts   []BankDashboardSummary     `json:"cash_accounts"`
 	Projects       []ProjectDashboardSummary  `json:"projects"`
 	RecentIncome   []ProjectTransactionDetail `json:"recent_income"`
 	RecentExpenses []ProjectTransactionDetail `json:"recent_expenses"`
@@ -276,11 +278,24 @@ type UpdateWidgetConfigRequest struct {
 	DisplayOrder *int     `json:"display_order,omitempty"`
 }
 
-// DailyPosition represents financial containers grouped by type
 type DailyPosition struct {
 	CashContainers []FinancialContainer `json:"cash_containers"`
 	BankContainers []FinancialContainer `json:"bank_containers"`
 	GeneratedAt    time.Time            `json:"generated_at"`
+}
+
+// CurrencyAmount represents an amount in a specific currency
+type CurrencyAmount struct {
+	Currency CurrencyCode `json:"currency"`
+	Amount   float64      `json:"amount"`
+}
+
+// FinancialSummary represents organization-wide financial totals
+type FinancialSummary struct {
+	TotalBalance  []CurrencyAmount `json:"total_balance"`
+	TotalIncome   []CurrencyAmount `json:"total_income"`
+	TotalExpenses []CurrencyAmount `json:"total_expenses"`
+	TotalCustody  []CurrencyAmount `json:"total_custody"`
 }
 
 type ProjectTransactionDetail struct {

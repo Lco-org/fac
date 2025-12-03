@@ -84,6 +84,58 @@ const getTransactionLabel = (type) => {
     <!-- Dashboard Content -->
     <div v-else-if="dashboardData" class="space-y-8">
       
+      <!-- Financial Summary Section -->
+      <section v-if="dashboardData.summary && (dashboardData.summary.total_balance.length > 0 || dashboardData.summary.total_income.length > 0 || dashboardData.summary.total_expenses.length > 0 || dashboardData.summary.total_custody.length > 0)" class="bg-gradient-to-r from-primary-50 to-primary-100 rounded-lg shadow-lg p-6 border border-primary-200">
+        <h2 class="text-2xl font-bold mb-6 text-gray-800 flex items-center">
+          <span class="ml-2">📊</span> الملخص المالي
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+          <!-- Total Balance -->
+          <div class="bg-white rounded-lg p-4 shadow">
+            <h3 class="text-sm font-semibold text-gray-600 mb-3">إجمالي الرصيد</h3>
+            <div v-if="dashboardData.summary.total_balance && dashboardData.summary.total_balance.length > 0" class="space-y-2">
+              <div v-for="amount in dashboardData.summary.total_balance" :key="amount.currency" class="text-lg font-bold text-green-600">
+                {{ formatCurrency(amount.amount, amount.currency) }}
+              </div>
+            </div>
+            <div v-else class="text-gray-400">لا توجد بيانات</div>
+          </div>
+
+          <!-- Total Income -->
+          <div class="bg-white rounded-lg p-4 shadow">
+            <h3 class="text-sm font-semibold text-gray-600 mb-3">إجمالي المقبوضات</h3>
+            <div v-if="dashboardData.summary.total_income && dashboardData.summary.total_income.length > 0" class="space-y-2">
+              <div v-for="amount in dashboardData.summary.total_income" :key="amount.currency" class="text-lg font-bold text-blue-600">
+                {{ formatCurrency(amount.amount, amount.currency) }}
+              </div>
+            </div>
+            <div v-else class="text-gray-400">لا توجد بيانات</div>
+          </div>
+
+          <!-- Total Expenses -->
+          <div class="bg-white rounded-lg p-4 shadow">
+            <h3 class="text-sm font-semibold text-gray-600 mb-3">إجمالي المصروفات</h3>
+            <div v-if="dashboardData.summary.total_expenses && dashboardData.summary.total_expenses.length > 0" class="space-y-2">
+              <div v-for="amount in dashboardData.summary.total_expenses" :key="amount.currency" class="text-lg font-bold text-orange-600">
+                {{ formatCurrency(amount.amount, amount.currency) }}
+              </div>
+            </div>
+            <div v-else class="text-gray-400">لا توجد بيانات</div>
+          </div>
+
+          <!-- Total Custody -->
+          <div class="bg-white rounded-lg p-4 shadow">
+            <h3 class="text-sm font-semibold text-gray-600 mb-3">إجمالي العهدة</h3>
+            <div v-if="dashboardData.summary.total_custody && dashboardData.summary.total_custody.length > 0" class="space-y-2">
+              <div v-for="amount in dashboardData.summary.total_custody" :key="amount.currency" class="text-lg font-bold text-purple-600">
+                {{ formatCurrency(amount.amount, amount.currency) }}
+              </div>
+            </div>
+            <div v-else class="text-gray-400">لا توجد بيانات</div>
+          </div>
+        </div>
+      </section>
+      
       <!-- 1. Bank Accounts Section -->
       <section v-if="dashboardData.bank_accounts && dashboardData.bank_accounts.length > 0">
         <h2 class="text-xl font-bold mb-4 text-gray-700 flex items-center">
@@ -132,7 +184,55 @@ const getTransactionLabel = (type) => {
         </div>
       </section>
 
-      <!-- 2. Projects Section -->
+      <!-- 2. Cash Accounts Section -->
+      <section v-if="dashboardData.cash_accounts && dashboardData.cash_accounts.length > 0">
+        <h2 class="text-xl font-bold mb-4 text-gray-700 flex items-center">
+          <span class="ml-2">💵</span> الموقف النقدي (آخر الحركات)
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div v-for="cash in dashboardData.cash_accounts" :key="cash.container.id" class="bg-white rounded-lg shadow-md p-6 border border-gray-100">
+            <div class="flex justify-between items-start mb-4 border-b pb-4">
+              <div>
+                <h3 class="text-lg font-bold text-gray-900">{{ cash.container.name_ar || cash.container.name }}</h3>
+                <p class="text-sm text-gray-500">{{ cash.container.location_ar || cash.container.location || 'صندوق نقدي' }}</p>
+              </div>
+              <div class="text-left">
+                <p class="text-sm text-gray-500">الرصيد الحالي</p>
+                <p class="text-xl font-bold" :class="cash.container.balance >= 0 ? 'text-green-600' : 'text-red-600'">
+                  {{ formatCurrency(cash.container.balance, cash.container.currency) }}
+                </p>
+              </div>
+            </div>
+            
+            <!-- Cash Transactions -->
+            <div class="overflow-x-auto">
+              <table class="min-w-full text-sm">
+                <thead>
+                  <tr class="bg-gray-50 text-gray-500">
+                    <th class="px-3 py-2 text-right">التاريخ</th>
+                    <th class="px-3 py-2 text-right">البيان</th>
+                    <th class="px-3 py-2 text-right">القيمة</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                  <tr v-for="tx in cash.last_transactions" :key="tx.id">
+                    <td class="px-3 py-2 whitespace-nowrap">{{ formatDate(tx.transaction_date) }}</td>
+                    <td class="px-3 py-2">{{ tx.description_ar || tx.description }}</td>
+                    <td class="px-3 py-2 font-medium" :class="['income_grant', 'income_donation'].includes(tx.type) ? 'text-green-600' : 'text-red-600'">
+                      {{ formatCurrency(tx.amount, tx.currency) }}
+                    </td>
+                  </tr>
+                  <tr v-if="!cash.last_transactions || cash.last_transactions.length === 0">
+                    <td colspan="3" class="px-3 py-4 text-center text-gray-400">لا توجد حركات حديثة</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. Projects Section -->
       <section v-if="dashboardData.projects && dashboardData.projects.length > 0">
         <h2 class="text-xl font-bold mb-4 text-gray-700 flex items-center">
           <span class="ml-2">📁</span> المشاريع (آخر الحركات)
@@ -180,7 +280,7 @@ const getTransactionLabel = (type) => {
         </div>
       </section>
 
-      <!-- 3. Recent Income & Expenses -->
+      <!-- 4. Recent Income & Expenses -->
       <section class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         <!-- Recent Income -->
