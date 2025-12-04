@@ -322,8 +322,8 @@ const exportToExcel = () => {
         rowIndex++
         
         // Table headers
-        XLSX.utils.sheet_add_aoa(ws, [['التاريخ', 'البيان', 'القيمة', 'العملة']], { origin: `A${rowIndex + 1}` })
-        for (let col = 0; col < 4; col++) {
+        XLSX.utils.sheet_add_aoa(ws, [['التاريخ', 'البيان', 'نوع العملية', 'القيمة', 'العملة']], { origin: `A${rowIndex + 1}` })
+        for (let col = 0; col < 5; col++) {
           const cellRef = XLSX.utils.encode_cell({ r: rowIndex, c: col })
           applyHeaderStyle(ws[cellRef])
         }
@@ -335,20 +335,21 @@ const exportToExcel = () => {
           XLSX.utils.sheet_add_aoa(ws, [[
             formatDate(tx.transaction_date),
             tx.description_ar || tx.description,
+            getTransactionLabel(tx.type),
             tx.amount,
             tx.currency
           ]], { origin: `A${rowIndex + 1}` })
           
-          for (let col = 0; col < 4; col++) {
+          for (let col = 0; col < 5; col++) {
             const cellRef = XLSX.utils.encode_cell({ r: rowIndex, c: col })
-            applyDataCellStyle(ws[cellRef], col === 2, col === 2 ? (isIncome ? 'green' : 'red') : null)
+            applyDataCellStyle(ws[cellRef], col === 3, col === 3 ? (isIncome ? 'green' : 'red') : null)
           }
           rowIndex++
         })
         rowIndex++
       })
       
-      ws['!cols'] = [{ wch: 25 }, { wch: 20 }, { wch: 12 }, { wch: 15 }, { wch: 10 }]
+      ws['!cols'] = [{ wch: 25 }, { wch: 20 }, { wch: 15 }, { wch: 12 }, { wch: 10 }]
       
       // Set RTL for Arabic
       setRTL(ws)
@@ -383,8 +384,8 @@ const exportToExcel = () => {
         }
         rowIndex++
         
-        XLSX.utils.sheet_add_aoa(ws, [['التاريخ', 'البيان', 'القيمة', 'العملة']], { origin: `A${rowIndex + 1}` })
-        for (let col = 0; col < 4; col++) {
+        XLSX.utils.sheet_add_aoa(ws, [['التاريخ', 'البيان', 'نوع العملية', 'القيمة', 'العملة']], { origin: `A${rowIndex + 1}` })
+        for (let col = 0; col < 5; col++) {
           applyHeaderStyle(ws[XLSX.utils.encode_cell({ r: rowIndex, c: col })])
         }
         rowIndex++
@@ -394,19 +395,20 @@ const exportToExcel = () => {
           XLSX.utils.sheet_add_aoa(ws, [[
             formatDate(tx.transaction_date),
             tx.description_ar || tx.description,
+            getTransactionLabel(tx.type),
             tx.amount,
             tx.currency
           ]], { origin: `A${rowIndex + 1}` })
           
-          for (let col = 0; col < 4; col++) {
-            applyDataCellStyle(ws[XLSX.utils.encode_cell({ r: rowIndex, c: col })], col === 2, col === 2 ? (isIncome ? 'green' : 'red') : null)
+          for (let col = 0; col < 5; col++) {
+            applyDataCellStyle(ws[XLSX.utils.encode_cell({ r: rowIndex, c: col })], col === 3, col === 3 ? (isIncome ? 'green' : 'red') : null)
           }
           rowIndex++
         })
         rowIndex++
       })
       
-      ws['!cols'] = [{ wch: 25 }, { wch: 20 }, { wch: 12 }, { wch: 15 }, { wch: 10 }]
+      ws['!cols'] = [{ wch: 25 }, { wch: 20 }, { wch: 15 }, { wch: 12 }, { wch: 10 }]
       
       // Set RTL for Arabic
       setRTL(ws)
@@ -441,8 +443,8 @@ const exportToExcel = () => {
         }
         rowIndex++
         
-        XLSX.utils.sheet_add_aoa(ws, [['التاريخ', 'البيان', 'القيمة', 'العملة']], { origin: `A${rowIndex + 1}` })
-        for (let col = 0; col < 4; col++) {
+        XLSX.utils.sheet_add_aoa(ws, [['التاريخ', 'البيان', 'نوع العملية', 'القيمة', 'العملة']], { origin: `A${rowIndex + 1}` })
+        for (let col = 0; col < 5; col++) {
           applyHeaderStyle(ws[XLSX.utils.encode_cell({ r: rowIndex, c: col })])
         }
         rowIndex++
@@ -452,19 +454,20 @@ const exportToExcel = () => {
           XLSX.utils.sheet_add_aoa(ws, [[
             formatDate(tx.transaction_date),
             tx.description_ar || tx.description,
+            getTransactionLabel(tx.type),
             tx.amount,
             tx.currency
           ]], { origin: `A${rowIndex + 1}` })
           
-          for (let col = 0; col < 4; col++) {
-            applyDataCellStyle(ws[XLSX.utils.encode_cell({ r: rowIndex, c: col })], col === 2, col === 2 ? (isIncome ? 'green' : 'red') : null)
+          for (let col = 0; col < 5; col++) {
+            applyDataCellStyle(ws[XLSX.utils.encode_cell({ r: rowIndex, c: col })], col === 3, col === 3 ? (isIncome ? 'green' : 'red') : null)
           }
           rowIndex++
         })
         rowIndex++
       })
       
-      ws['!cols'] = [{ wch: 30 }, { wch: 15 }, { wch: 12 }, { wch: 15 }, { wch: 10 }]
+      ws['!cols'] = [{ wch: 30 }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 10 }]
       
       // Set RTL for Arabic
       setRTL(ws)
@@ -480,8 +483,8 @@ const exportToExcel = () => {
       ws['A1'] = applySectionHeaderStyle(ws['A1'])
       ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }]
       
-      XLSX.utils.sheet_add_aoa(ws, [['التاريخ', 'البيان', 'الحساب', 'القيمة', 'العملة']], { origin: 'A3' })
-      for (let col = 0; col < 5; col++) {
+      XLSX.utils.sheet_add_aoa(ws, [['التاريخ', 'البيان', 'نوع العملية', 'الحساب', 'القيمة', 'العملة']], { origin: 'A3' })
+      for (let col = 0; col < 6; col++) {
         applyHeaderStyle(ws[XLSX.utils.encode_cell({ r: 2, c: col })])
       }
       
@@ -489,17 +492,18 @@ const exportToExcel = () => {
         XLSX.utils.sheet_add_aoa(ws, [[
           formatDate(tx.transaction_date),
           tx.description_ar || tx.description,
+          getTransactionLabel(tx.type),
           tx.container_name,
           tx.amount,
           tx.currency
         ]], { origin: `A${idx + 4}` })
         
-        for (let col = 0; col < 5; col++) {
-          applyDataCellStyle(ws[XLSX.utils.encode_cell({ r: idx + 3, c: col })], col === 3, col === 3 ? 'green' : null)
+        for (let col = 0; col < 6; col++) {
+          applyDataCellStyle(ws[XLSX.utils.encode_cell({ r: idx + 3, c: col })], col === 4, col === 4 ? 'green' : null)
         }
       })
       
-      ws['!cols'] = [{ wch: 15 }, { wch: 35 }, { wch: 20 }, { wch: 15 }, { wch: 10 }]
+      ws['!cols'] = [{ wch: 15 }, { wch: 35 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, { wch: 10 }]
       
       // Set RTL for Arabic
       setRTL(ws)
@@ -515,8 +519,8 @@ const exportToExcel = () => {
       ws['A1'] = applySectionHeaderStyle(ws['A1'])
       ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 4 } }]
       
-      XLSX.utils.sheet_add_aoa(ws, [['التاريخ', 'البيان', 'الحساب', 'القيمة', 'العملة']], { origin: 'A3' })
-      for (let col = 0; col < 5; col++) {
+      XLSX.utils.sheet_add_aoa(ws, [['التاريخ', 'البيان', 'نوع العملية', 'الحساب', 'القيمة', 'العملة']], { origin: 'A3' })
+      for (let col = 0; col < 6; col++) {
         applyHeaderStyle(ws[XLSX.utils.encode_cell({ r: 2, c: col })])
       }
       
@@ -524,17 +528,18 @@ const exportToExcel = () => {
         XLSX.utils.sheet_add_aoa(ws, [[
           formatDate(tx.transaction_date),
           tx.description_ar || tx.description,
+          getTransactionLabel(tx.type),
           tx.container_name,
           tx.amount,
           tx.currency
         ]], { origin: `A${idx + 4}` })
         
-        for (let col = 0; col < 5; col++) {
-          applyDataCellStyle(ws[XLSX.utils.encode_cell({ r: idx + 3, c: col })], col === 3, col === 3 ? 'red' : null)
+        for (let col = 0; col < 6; col++) {
+          applyDataCellStyle(ws[XLSX.utils.encode_cell({ r: idx + 3, c: col })], col === 4, col === 4 ? 'red' : null)
         }
       })
       
-      ws['!cols'] = [{ wch: 15 }, { wch: 35 }, { wch: 20 }, { wch: 15 }, { wch: 10 }]
+      ws['!cols'] = [{ wch: 15 }, { wch: 35 }, { wch: 15 }, { wch: 20 }, { wch: 15 }, { wch: 10 }]
       
       // Set RTL for Arabic
       setRTL(ws)
@@ -669,6 +674,7 @@ const exportToExcel = () => {
                     <tr class="bg-gray-50 text-gray-500">
                       <th class="px-3 py-2 text-right">التاريخ</th>
                       <th class="px-3 py-2 text-right">البيان</th>
+                      <th class="px-3 py-2 text-right">نوع العملية</th>
                       <th class="px-3 py-2 text-right">القيمة</th>
                     </tr>
                   </thead>
@@ -676,12 +682,13 @@ const exportToExcel = () => {
                     <tr v-for="tx in bank.last_transactions" :key="tx.id">
                       <td class="px-3 py-2 whitespace-nowrap">{{ formatDate(tx.transaction_date) }}</td>
                       <td class="px-3 py-2">{{ tx.description_ar || tx.description }}</td>
-                      <td class="px-3 py-2 font-medium" :class="['income_grant', 'income_donation'].includes(tx.type) ? 'text-green-600' : 'text-red-600'">
+                      <td class="px-3 py-2 text-gray-600">{{ getTransactionLabel(tx.type) }}</td>
+                      <td class="px-3 py-2 font-medium" :class="['income_grant', 'income_donation'].includes(tx.type) || (tx.type === 'transfer' && tx.balance_after > tx.balance_before) ? 'text-green-600' : 'text-red-600'">
                         {{ formatCurrency(tx.amount, tx.currency) }}
                       </td>
                     </tr>
                     <tr v-if="!bank.last_transactions || bank.last_transactions.length === 0">
-                      <td colspan="3" class="px-3 py-4 text-center text-gray-400">لا توجد حركات حديثة</td>
+                      <td colspan="4" class="px-3 py-4 text-center text-gray-400">لا توجد حركات حديثة</td>
                     </tr>
                   </tbody>
                 </table>
@@ -717,6 +724,7 @@ const exportToExcel = () => {
                     <tr class="bg-gray-50 text-gray-500">
                       <th class="px-3 py-2 text-right">التاريخ</th>
                       <th class="px-3 py-2 text-right">البيان</th>
+                      <th class="px-3 py-2 text-right">نوع العملية</th>
                       <th class="px-3 py-2 text-right">القيمة</th>
                     </tr>
                   </thead>
@@ -724,12 +732,13 @@ const exportToExcel = () => {
                     <tr v-for="tx in cash.last_transactions" :key="tx.id">
                       <td class="px-3 py-2 whitespace-nowrap">{{ formatDate(tx.transaction_date) }}</td>
                       <td class="px-3 py-2">{{ tx.description_ar || tx.description }}</td>
-                      <td class="px-3 py-2 font-medium" :class="['income_grant', 'income_donation'].includes(tx.type) ? 'text-green-600' : 'text-red-600'">
+                      <td class="px-3 py-2 text-gray-600">{{ getTransactionLabel(tx.type) }}</td>
+                      <td class="px-3 py-2 font-medium" :class="['income_grant', 'income_donation'].includes(tx.type) || (tx.type === 'transfer' && tx.balance_after > tx.balance_before) ? 'text-green-600' : 'text-red-600'">
                         {{ formatCurrency(tx.amount, tx.currency) }}
                       </td>
                     </tr>
                     <tr v-if="!cash.last_transactions || cash.last_transactions.length === 0">
-                      <td colspan="3" class="px-3 py-4 text-center text-gray-400">لا توجد حركات حديثة</td>
+                      <td colspan="4" class="px-3 py-4 text-center text-gray-400">لا توجد حركات حديثة</td>
                     </tr>
                   </tbody>
                 </table>
@@ -765,6 +774,7 @@ const exportToExcel = () => {
                     <tr class="bg-gray-50 text-gray-500">
                       <th class="px-3 py-2 text-right">التاريخ</th>
                       <th class="px-3 py-2 text-right">البيان</th>
+                      <th class="px-3 py-2 text-right">نوع العملية</th>
                       <th class="px-3 py-2 text-right">القيمة</th>
                     </tr>
                   </thead>
@@ -772,12 +782,13 @@ const exportToExcel = () => {
                     <tr v-for="tx in project.last_transactions" :key="tx.id">
                       <td class="px-3 py-2 whitespace-nowrap">{{ formatDate(tx.transaction_date) }}</td>
                       <td class="px-3 py-2">{{ tx.description_ar || tx.description }}</td>
+                      <td class="px-3 py-2 text-gray-600">{{ getTransactionLabel(tx.type) }}</td>
                       <td class="px-3 py-2 font-medium" :class="['income_grant', 'income_donation'].includes(tx.type) ? 'text-green-600' : 'text-red-600'">
                         {{ formatCurrency(tx.amount, tx.currency) }}
                       </td>
                     </tr>
                     <tr v-if="!project.last_transactions || project.last_transactions.length === 0">
-                      <td colspan="3" class="px-3 py-4 text-center text-gray-400">لا توجد حركات حديثة</td>
+                      <td colspan="4" class="px-3 py-4 text-center text-gray-400">لا توجد حركات حديثة</td>
                     </tr>
                   </tbody>
                 </table>
@@ -805,6 +816,7 @@ const exportToExcel = () => {
                   <tr class="bg-gray-50 text-gray-500">
                     <th class="px-3 py-2 text-right">التاريخ</th>
                     <th class="px-3 py-2 text-right">البيان</th>
+                    <th class="px-3 py-2 text-right">نوع العملية</th>
                     <th class="px-3 py-2 text-right">القيمة</th>
                   </tr>
                 </thead>
@@ -815,12 +827,13 @@ const exportToExcel = () => {
                       <div class="font-medium text-gray-900">{{ tx.description_ar || tx.description }}</div>
                       <div class="text-xs text-gray-500">{{ tx.container_name }}</div>
                     </td>
+                    <td class="px-3 py-2 text-gray-600">{{ getTransactionLabel(tx.type) }}</td>
                     <td class="px-3 py-2 font-bold text-green-600">
                       {{ formatCurrency(tx.amount, tx.currency) }}
                     </td>
                   </tr>
                   <tr v-if="!dashboardData.recent_income || dashboardData.recent_income.length === 0">
-                    <td colspan="3" class="px-3 py-8 text-center text-gray-400">لا توجد مقبوضات حديثة</td>
+                    <td colspan="4" class="px-3 py-8 text-center text-gray-400">لا توجد مقبوضات حديثة</td>
                   </tr>
                 </tbody>
               </table>
@@ -838,6 +851,7 @@ const exportToExcel = () => {
                   <tr class="bg-gray-50 text-gray-500">
                     <th class="px-3 py-2 text-right">التاريخ</th>
                     <th class="px-3 py-2 text-right">البيان</th>
+                    <th class="px-3 py-2 text-right">نوع العملية</th>
                     <th class="px-3 py-2 text-right">القيمة</th>
                   </tr>
                 </thead>
@@ -848,12 +862,13 @@ const exportToExcel = () => {
                       <div class="font-medium text-gray-900">{{ tx.description_ar || tx.description }}</div>
                       <div class="text-xs text-gray-500">{{ tx.container_name }}</div>
                     </td>
+                    <td class="px-3 py-2 text-gray-600">{{ getTransactionLabel(tx.type) }}</td>
                     <td class="px-3 py-2 font-bold text-red-600">
                       {{ formatCurrency(tx.amount, tx.currency) }}
                     </td>
                   </tr>
                   <tr v-if="!dashboardData.recent_expenses || dashboardData.recent_expenses.length === 0">
-                    <td colspan="3" class="px-3 py-8 text-center text-gray-400">لا توجد مصروفات حديثة</td>
+                    <td colspan="4" class="px-3 py-8 text-center text-gray-400">لا توجد مصروفات حديثة</td>
                   </tr>
                 </tbody>
               </table>

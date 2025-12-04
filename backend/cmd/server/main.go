@@ -39,6 +39,7 @@ func main() {
 	employeeService := services.NewEmployeeService(db)
 	memberService := services.NewMemberService(db)
 	dashboardService := services.NewDashboardService(db)
+	transferService := services.NewTransferService(db)
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authService, cfg)
@@ -50,6 +51,7 @@ func main() {
 	employeeHandler := handlers.NewEmployeeHandler(employeeService)
 	memberHandler := handlers.NewMemberHandler(memberService)
 	dashboardHandler := handlers.NewDashboardHandler(dashboardService)
+	transferHandler := handlers.NewTransferHandler(transferService)
 
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
@@ -121,6 +123,10 @@ func main() {
 	transactions.Post("/", middleware.RequireFinanceOrAdmin(), transactionHandler.CreateTransaction)
 	transactions.Get("/:id", middleware.RequireAnyAuthenticated(), transactionHandler.GetTransaction)
 	transactions.Post("/:id/reverse", middleware.RequireFinanceOrAdmin(), transactionHandler.ReverseTransaction)
+
+	// Transfer routes (Finance & Admin only)
+	transfers := protected.Group("/transfers")
+	transfers.Post("/", middleware.RequireFinanceOrAdmin(), transferHandler.CreateTransfer)
 
 	// Report routes (All authenticated users can view)
 	reports := protected.Group("/reports")

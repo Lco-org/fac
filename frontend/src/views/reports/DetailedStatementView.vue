@@ -194,11 +194,11 @@
                   <td v-if="statementType === 'container'" class="px-4 py-3 text-sm font-medium">{{ transaction.project_name }}</td>
                   <td v-if="statementType === 'project'" class="px-4 py-3 text-sm">{{ transaction.container_name }}</td>
                   <td class="px-4 py-3 text-center">
-                    <span v-if="isIncome(transaction.type)" class="text-lg font-bold text-green-600">{{ formatNumber(transaction.amount) }}</span>
+                    <span v-if="isCredit(transaction)" class="text-lg font-bold text-green-600">{{ formatNumber(transaction.amount) }}</span>
                     <span v-else class="text-gray-300">-</span>
                   </td>
                   <td class="px-4 py-3 text-center">
-                    <span v-if="!isIncome(transaction.type)" class="text-lg font-bold text-red-600">{{ formatNumber(transaction.amount) }}</span>
+                    <span v-if="!isCredit(transaction)" class="text-lg font-bold text-red-600">{{ formatNumber(transaction.amount) }}</span>
                     <span v-else class="text-gray-300">-</span>
                   </td>
                   <td v-if="statementType === 'container'" class="px-4 py-3 text-center">
@@ -347,7 +347,11 @@ const getTransactionTypeName = (type) => {
   return types[type] || type
 }
 
-const isIncome = (type) => type === 'income_grant' || type === 'income_donation'
+const isCredit = (transaction) => {
+  if (['income_grant', 'income_donation'].includes(transaction.type)) return true
+  if (transaction.type === 'transfer' && transaction.balance_after > transaction.balance_before) return true
+  return false
+}
 
 onMounted(() => {
   fetchContainers()

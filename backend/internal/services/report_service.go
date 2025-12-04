@@ -516,10 +516,10 @@ func (s *ReportService) GetContainerStatement(ctx context.Context, containerID s
 	query := `
 		SELECT t.id, t.transaction_number, t.type, t.amount, t.currency, 
 		       t.description, t.description_ar, t.payee_payer,
-		       p.code, p.name, t.balance_before, t.balance_after,
+		       COALESCE(p.code, ''), COALESCE(p.name, ''), t.balance_before, t.balance_after,
 		       t.transaction_date, t.created_at
 		FROM transactions t
-		JOIN projects p ON t.project_id = p.id
+		LEFT JOIN projects p ON t.project_id = p.id
 		WHERE t.container_id = $1 AND t.status = 'completed'
 	`
 	args := []interface{}{containerID}

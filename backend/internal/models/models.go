@@ -444,3 +444,22 @@ type UpdateProjectRequest struct {
 	Currency    *CurrencyCode `json:"currency,omitempty"`
 	IsActive    *bool         `json:"is_active,omitempty"`
 }
+
+// CreateTransferRequest for creating transfers between containers
+type CreateTransferRequest struct {
+	FromContainerID uuid.UUID    `json:"from_container_id"`
+	ToContainerID   uuid.UUID    `json:"to_container_id"`
+	Amount          float64      `json:"amount"`
+	Currency        CurrencyCode `json:"currency"`
+	Description     string       `json:"description"`
+	DescriptionAr   *string      `json:"description_ar,omitempty"`
+	ReferenceNumber *string      `json:"reference_number,omitempty"`
+	TransactionDate *time.Time   `json:"transaction_date,omitempty"`
+}
+
+// TransferResponse represents the response after creating a transfer
+type TransferResponse struct {
+	DebitTransaction  Transaction `json:"debit_transaction"`
+	CreditTransaction Transaction `json:"credit_transaction"`
+	Message           string      `json:"message"`
+}

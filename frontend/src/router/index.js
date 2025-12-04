@@ -55,6 +55,12 @@ const routes = [
                 meta: { requiresRole: ['admin', 'finance'] },
             },
             {
+                path: 'transfers',
+                name: 'Transfers',
+                component: () => import('@/views/transfers/TransfersView.vue'),
+                meta: { requiresRole: ['admin', 'finance'] },
+            },
+            {
                 path: 'admin/users',
                 name: 'Users',
                 component: () => import('@/views/admin/UsersView.vue'),

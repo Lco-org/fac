@@ -50,6 +50,12 @@ const menuItems = computed(() => {
       ],
     },
     {
+      title: 'التحويلات',
+      icon: '🔄',
+      path: '/transfers',
+      roles: ['admin', 'finance'],
+    },
+    {
       title: 'التقارير',
       icon: '📈',
       roles: ['admin', 'finance', 'auditor'],
