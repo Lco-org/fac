@@ -81,6 +81,12 @@ const handleSubmit = async () => {
     const response = await api.post('/transfers', form.value)
     success.value = true
     
+    // Open receipt in new tab for the debit transaction
+    if (response.data.debit_transaction && response.data.debit_transaction.id) {
+      const receiptUrl = `/receipt/${response.data.debit_transaction.id}`
+      window.open(receiptUrl, '_blank')
+    }
+    
     // Update container balances locally
     const sourceIdx = containers.value.findIndex(c => c.id === form.value.from_container_id)
     const destIdx = containers.value.findIndex(c => c.id === form.value.to_container_id)

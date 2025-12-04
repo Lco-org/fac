@@ -75,6 +75,13 @@ const handleSubmit = async () => {
     }
 
     success.value = true
+    
+    // Open receipt in new tab
+    if (response.data.transaction && response.data.transaction.id) {
+      const receiptUrl = `/receipt/${response.data.transaction.id}`
+      window.open(receiptUrl, '_blank')
+    }
+    
     resetForm()
   } catch (err) {
     error.value = err.response?.data?.error || 'فشل في إنشاء العملية'

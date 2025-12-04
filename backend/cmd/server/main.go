@@ -40,6 +40,7 @@ func main() {
 	memberService := services.NewMemberService(db)
 	dashboardService := services.NewDashboardService(db)
 	transferService := services.NewTransferService(db)
+	receiptService := services.NewReceiptService(db)
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authService, cfg)
@@ -52,6 +53,7 @@ func main() {
 	memberHandler := handlers.NewMemberHandler(memberService)
 	dashboardHandler := handlers.NewDashboardHandler(dashboardService)
 	transferHandler := handlers.NewTransferHandler(transferService)
+	receiptHandler := handlers.NewReceiptHandler(receiptService)
 
 	// Create Fiber app
 	app := fiber.New(fiber.Config{
@@ -127,6 +129,10 @@ func main() {
 	// Transfer routes (Finance & Admin only)
 	transfers := protected.Group("/transfers")
 	transfers.Post("/", middleware.RequireFinanceOrAdmin(), transferHandler.CreateTransfer)
+
+	// Receipt routes (All authenticated users can view)
+	receipts := protected.Group("/receipts")
+	receipts.Get("/:id", middleware.RequireAnyAuthenticated(), receiptHandler.GetReceiptData)
 
 	// Report routes (All authenticated users can view)
 	reports := protected.Group("/reports")

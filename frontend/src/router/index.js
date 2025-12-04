@@ -61,6 +61,12 @@ const routes = [
                 meta: { requiresRole: ['admin', 'finance'] },
             },
             {
+                path: 'receipt/:id',
+                name: 'Receipt',
+                component: () => import('@/views/ReceiptView.vue'),
+                meta: { requiresAuth: true },
+            },
+            {
                 path: 'admin/users',
                 name: 'Users',
                 component: () => import('@/views/admin/UsersView.vue'),
@@ -105,6 +111,12 @@ const routes = [
                 component: () => import('@/views/reports/DetailedStatementView.vue'),
             },
         ],
+    },
+    {
+        path: '/receipt/:id',
+        name: 'Receipt',
+        component: () => import('@/views/ReceiptView.vue'),
+        meta: { requiresAuth: true },
     },
 ]
 
