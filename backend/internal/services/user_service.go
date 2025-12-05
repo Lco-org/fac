@@ -5,19 +5,20 @@ import (
 	"cso-erp/internal/config"
 	"cso-erp/internal/database"
 	"cso-erp/internal/models"
+	"cso-erp/internal/security"
 	"errors"
 	"fmt"
-	"log"
 
 	"github.com/google/uuid"
-	"golang.org/x/crypto/bcrypt"
 )
 
+// UserService handles user management operations
 type UserService struct {
 	db  *database.DB
 	cfg *config.Config
 }
 
+// NewUserService creates a new user service
 func NewUserService(db *database.DB, cfg *config.Config) *UserService {
 	return &UserService{db: db, cfg: cfg}
 }
@@ -31,14 +32,12 @@ var (
 
 // ListUsers returns all users
 func (s *UserService) ListUsers(ctx context.Context) ([]models.User, error) {
-	log.Println("DEBUG: Entering ListUsers service method")
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, username, email, full_name, full_name_ar, role, is_active, last_login, created_at
 		FROM users
 		ORDER BY created_at DESC
 	`)
 	if err != nil {
-		log.Printf("DEBUG: QueryContext failed: %v", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -58,18 +57,15 @@ func (s *UserService) ListUsers(ctx context.Context) ([]models.User, error) {
 			&user.CreatedAt,
 		)
 		if err != nil {
-			log.Printf("DEBUG: Row scan failed: %v", err)
 			return nil, err
 		}
 		users = append(users, user)
 	}
 
 	if err := rows.Err(); err != nil {
-		log.Printf("DEBUG: Rows iteration error: %v", err)
 		return nil, err
 	}
 
-	log.Printf("DEBUG: Found %d users", len(users))
 	return users, nil
 }
 
@@ -99,8 +95,16 @@ func (s *UserService) GetUserByID(ctx context.Context, id uuid.UUID) (*models.Us
 	return &user, nil
 }
 
-// CreateUser creates a new user
+// CreateUser creates a new user with Argon2id password hashing
 func (s *UserService) CreateUser(ctx context.Context, req *models.CreateUserRequest, createdBy uuid.UUID) (*models.User, error) {
+	// Validate email domain
+	if err := security.ValidateEmail(req.Email); err != nil {
+		if err == security.ErrUnauthorizedDomain {
+			return nil, errors.New("only @lco.org.ly email addresses are allowed")
+		}
+		return nil, err
+	}
+
 	// Check if username exists
 	var exists bool
 	err := s.db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)", req.Username).Scan(&exists)
@@ -112,7 +116,8 @@ func (s *UserService) CreateUser(ctx context.Context, req *models.CreateUserRequ
 	}
 
 	// Check if email exists
-	err = s.db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)", req.Email).Scan(&exists)
+	email := security.NormalizeEmail(req.Email)
+	err = s.db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE email = $1)", email).Scan(&exists)
 	if err != nil {
 		return nil, err
 	}
@@ -120,8 +125,13 @@ func (s *UserService) CreateUser(ctx context.Context, req *models.CreateUserRequ
 		return nil, ErrEmailExists
 	}
 
-	// Hash password
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), s.cfg.Security.BcryptCost)
+	// Validate password strength
+	if len(req.Password) < 8 {
+		return nil, errors.New("password must be at least 8 characters")
+	}
+
+	// Hash password using Argon2id
+	hashedPassword, err := security.HashPassword(req.Password, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -131,7 +141,7 @@ func (s *UserService) CreateUser(ctx context.Context, req *models.CreateUserRequ
 		INSERT INTO users (username, email, password_hash, full_name, full_name_ar, role, created_by)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id, username, email, full_name, full_name_ar, role, is_active, created_at
-	`, req.Username, req.Email, string(hashedPassword), req.FullName, req.FullNameAr, req.Role, createdBy).Scan(
+	`, req.Username, email, hashedPassword, req.FullName, req.FullNameAr, req.Role, createdBy).Scan(
 		&user.ID,
 		&user.Username,
 		&user.Email,
@@ -157,8 +167,16 @@ func (s *UserService) UpdateUser(ctx context.Context, id uuid.UUID, req *models.
 	argCount := 1
 
 	if req.Email != nil {
+		// Validate email domain
+		if err := security.ValidateEmail(*req.Email); err != nil {
+			if err == security.ErrUnauthorizedDomain {
+				return nil, errors.New("only @lco.org.ly email addresses are allowed")
+			}
+			return nil, err
+		}
+		email := security.NormalizeEmail(*req.Email)
 		query += fmt.Sprintf("email = $%d, ", argCount)
-		args = append(args, *req.Email)
+		args = append(args, email)
 		argCount++
 	}
 	if req.FullName != nil {
@@ -209,7 +227,6 @@ func (s *UserService) DeleteUser(ctx context.Context, id uuid.UUID) error {
 
 	if err != nil {
 		// Check for foreign key constraint violation
-		// This is a simplified check, in production we should check specific error codes
 		return errors.New("cannot delete user: associated records exist (try deactivating instead)")
 	}
 

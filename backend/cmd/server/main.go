@@ -29,8 +29,24 @@ func main() {
 	}
 	defer db.Close()
 
+	// Initialize email service (for 2FA)
+	var emailConfig *services.EmailConfig
+	if cfg.Email.SMTPHost != "" {
+		emailConfig = &services.EmailConfig{
+			SMTPHost:    cfg.Email.SMTPHost,
+			SMTPPort:    cfg.Email.SMTPPort,
+			Username:    cfg.Email.Username,
+			Password:    cfg.Email.Password,
+			FromAddress: cfg.Email.FromAddress,
+			FromName:    cfg.Email.FromName,
+			UseTLS:      cfg.Email.UseTLS,
+			SkipVerify:  cfg.Email.SkipVerify,
+		}
+	}
+	emailService := services.NewEmailService(emailConfig)
+
 	// Initialize services
-	authService := services.NewAuthService(db, cfg)
+	authService := services.NewAuthService(db, cfg, emailService)
 	userService := services.NewUserService(db, cfg)
 	containerService := services.NewContainerService(db)
 	transactionService := services.NewTransactionService(db)
@@ -84,14 +100,23 @@ func main() {
 	// API routes
 	api := app.Group("/api/v1")
 
-	// Public routes
+	// Public routes (with rate limiting)
 	auth := api.Group("/auth")
 	auth.Post("/login", middleware.RateLimitMiddleware(&cfg.Security), authHandler.Login)
 	auth.Post("/logout", authHandler.Logout)
 	auth.Post("/register", middleware.RateLimitMiddleware(&cfg.Security), authHandler.Register)
+	// 2FA public routes (for completing login)
+	auth.Post("/verify-2fa", middleware.RateLimitMiddleware(&cfg.Security), authHandler.Verify2FA)
+	auth.Post("/resend-otp", middleware.RateLimitMiddleware(&cfg.Security), authHandler.ResendOTP)
 
-	// Protected routes
+	// Protected routes (requires authentication)
 	protected := api.Group("", middleware.AuthMiddleware(&cfg.JWT))
+
+	// Protected auth routes (user session management)
+	protectedAuth := protected.Group("/auth")
+	protectedAuth.Post("/revoke-all-sessions", authHandler.RevokeAllSessions) // Kill Switch
+	protectedAuth.Post("/change-password", authHandler.ChangePassword)
+	protectedAuth.Post("/toggle-2fa", authHandler.Toggle2FA) // Enable/disable 2FA
 
 	// User routes
 	users := protected.Group("/users")

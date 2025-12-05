@@ -15,18 +15,20 @@ const (
 )
 
 type User struct {
-	ID           uuid.UUID  `json:"id"`
-	Username     string     `json:"username"`
-	Email        string     `json:"email"`
-	PasswordHash string     `json:"-"`
-	FullName     string     `json:"full_name"`
-	FullNameAr   *string    `json:"full_name_ar,omitempty"`
-	Role         UserRole   `json:"role"`
-	IsActive     bool       `json:"is_active"`
-	LastLogin    *time.Time `json:"last_login,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
-	CreatedBy    *uuid.UUID `json:"created_by,omitempty"`
+	ID               uuid.UUID  `json:"id"`
+	Username         string     `json:"username"`
+	Email            string     `json:"email"`
+	PasswordHash     string     `json:"-"`
+	FullName         string     `json:"full_name"`
+	FullNameAr       *string    `json:"full_name_ar,omitempty"`
+	Role             UserRole   `json:"role"`
+	TokenVersion     int        `json:"-"`                  // Incremented to invalidate all sessions (Kill Switch)
+	TwoFactorEnabled bool       `json:"two_factor_enabled"` // Email-based 2FA
+	IsActive         bool       `json:"is_active"`
+	LastLogin        *time.Time `json:"last_login,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+	CreatedBy        *uuid.UUID `json:"created_by,omitempty"`
 }
 
 type ContainerType string

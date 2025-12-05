@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/hex"
 	"log"
 	"os"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// Config holds all application configuration
 type Config struct {
 	App      AppConfig
 	Database DatabaseConfig
@@ -16,14 +18,17 @@ type Config struct {
 	Security SecurityConfig
 	CORS     CORSConfig
 	Upload   UploadConfig
+	Email    EmailConfig
 }
 
+// AppConfig holds application settings
 type AppConfig struct {
 	Env  string
 	Port string
 	Host string
 }
 
+// DatabaseConfig holds database connection settings
 type DatabaseConfig struct {
 	Host     string
 	Port     string
@@ -33,37 +38,66 @@ type DatabaseConfig struct {
 	SSLMode  string
 }
 
+// JWTConfig holds JWT token settings
 type JWTConfig struct {
 	Secret        string
 	Expiry        time.Duration
 	RefreshExpiry time.Duration
 }
 
+// SecurityConfig holds security-related settings
 type SecurityConfig struct {
-	BcryptCost      int
+	// EncryptionKey is a 32-byte key for AES-256-GCM encryption
+	// Must be hex-encoded (64 characters)
+	EncryptionKey []byte
+
+	// Argon2 password hashing parameters
+	Argon2Memory      uint32 // Memory in KB (default: 65536 = 64MB)
+	Argon2Iterations  uint32 // Time cost (default: 3)
+	Argon2Parallelism uint8  // CPU threads (default: 4)
+
+	// Rate limiting
 	RateLimitMax    int
 	RateLimitWindow time.Duration
 }
 
+// CORSConfig holds CORS settings
 type CORSConfig struct {
 	Origin      string
 	Credentials bool
 }
 
+// UploadConfig holds file upload settings
 type UploadConfig struct {
 	MaxFileSize int64
 	UploadDir   string
 }
 
+// EmailConfig holds SMTP email settings for 2FA
+type EmailConfig struct {
+	SMTPHost    string
+	SMTPPort    string
+	Username    string
+	Password    string
+	FromAddress string
+	FromName    string
+	UseTLS      bool
+	SkipVerify  bool // For development only
+}
+
+// Load loads configuration from environment variables
 func Load() *Config {
 	// Load .env file
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, using environment variables")
 	}
 
-	jwtExpiry, _ := time.ParseDuration(getEnv("JWT_EXPIRY", "24h"))
+	jwtExpiry, _ := time.ParseDuration(getEnv("JWT_EXPIRY", "3h"))
 	jwtRefreshExpiry, _ := time.ParseDuration(getEnv("JWT_REFRESH_EXPIRY", "168h"))
 	rateLimitWindow, _ := time.ParseDuration(getEnv("RATE_LIMIT_WINDOW", "1m"))
+
+	// Parse encryption key from hex
+	encryptionKey := parseEncryptionKey(getEnv("ENCRYPTION_KEY", ""))
 
 	return &Config{
 		App: AppConfig{
@@ -85,9 +119,12 @@ func Load() *Config {
 			RefreshExpiry: jwtRefreshExpiry,
 		},
 		Security: SecurityConfig{
-			BcryptCost:      getEnvAsInt("BCRYPT_COST", 10),
-			RateLimitMax:    getEnvAsInt("RATE_LIMIT_MAX", 100),
-			RateLimitWindow: rateLimitWindow,
+			EncryptionKey:     encryptionKey,
+			Argon2Memory:      uint32(getEnvAsInt("ARGON2_MEMORY", 65536)),
+			Argon2Iterations:  uint32(getEnvAsInt("ARGON2_ITERATIONS", 3)),
+			Argon2Parallelism: uint8(getEnvAsInt("ARGON2_PARALLELISM", 4)),
+			RateLimitMax:      getEnvAsInt("RATE_LIMIT_MAX", 100),
+			RateLimitWindow:   rateLimitWindow,
 		},
 		CORS: CORSConfig{
 			Origin:      getEnv("CORS_ORIGIN", "http://localhost:5173"),
@@ -97,7 +134,39 @@ func Load() *Config {
 			MaxFileSize: getEnvAsInt64("MAX_FILE_SIZE", 10485760),
 			UploadDir:   getEnv("UPLOAD_DIR", "./uploads"),
 		},
+		Email: EmailConfig{
+			SMTPHost:    getEnv("SMTP_HOST", ""),
+			SMTPPort:    getEnv("SMTP_PORT", "587"),
+			Username:    getEnv("SMTP_USERNAME", ""),
+			Password:    getEnv("SMTP_PASSWORD", ""),
+			FromAddress: getEnv("SMTP_FROM_ADDRESS", "noreply@lco.org.ly"),
+			FromName:    getEnv("SMTP_FROM_NAME", "CSO ERP System"),
+			UseTLS:      getEnvAsBool("SMTP_USE_TLS", true),
+			SkipVerify:  getEnvAsBool("SMTP_SKIP_VERIFY", false),
+		},
 	}
+}
+
+// parseEncryptionKey parses a hex-encoded encryption key
+// Returns a 32-byte key for AES-256 or nil if not configured
+func parseEncryptionKey(hexKey string) []byte {
+	if hexKey == "" {
+		log.Println("⚠️  ENCRYPTION_KEY not set - data encryption disabled")
+		return nil
+	}
+
+	if len(hexKey) != 64 {
+		log.Println("⚠️  ENCRYPTION_KEY must be 64 hex characters (32 bytes)")
+		return nil
+	}
+
+	key, err := hex.DecodeString(hexKey)
+	if err != nil {
+		log.Println("⚠️  ENCRYPTION_KEY is not valid hex")
+		return nil
+	}
+
+	return key
 }
 
 func getEnv(key, defaultValue string) string {
