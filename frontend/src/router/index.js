@@ -102,6 +102,12 @@ const routes = [
                 component: () => import('@/views/admin/DashboardConfigView.vue'),
                 meta: { requiresRole: ['admin'] },
             },
+            {
+                path: 'account/security',
+                name: 'AccountSecurity',
+                component: () => import('@/views/admin/AccountSecurityView.vue'),
+                meta: { requiresAuth: true },
+            },
 
 
 

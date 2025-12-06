@@ -59,6 +59,7 @@ type SecurityConfig struct {
 	// Rate limiting
 	RateLimitMax    int
 	RateLimitWindow time.Duration
+	CookieSecure    bool
 }
 
 // CORSConfig holds CORS settings
@@ -125,6 +126,7 @@ func Load() *Config {
 			Argon2Parallelism: uint8(getEnvAsInt("ARGON2_PARALLELISM", 4)),
 			RateLimitMax:      getEnvAsInt("RATE_LIMIT_MAX", 100),
 			RateLimitWindow:   rateLimitWindow,
+			CookieSecure:      getEnvAsBool("COOKIE_SECURE", true),
 		},
 		CORS: CORSConfig{
 			Origin:      getEnv("CORS_ORIGIN", "http://localhost:5173"),

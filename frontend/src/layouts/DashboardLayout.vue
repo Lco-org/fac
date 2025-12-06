@@ -148,6 +148,13 @@ const handleLogout = async () => {
                 {{ authStore.userRole === 'admin' ? 'مدير' : authStore.userRole === 'finance' ? 'مالي' : 'مراجع' }}
               </span>
             </span>
+            <RouterLink
+              to="/account/security"
+              class="text-gray-600 hover:text-primary-600 transition-colors"
+              title="إعدادات الأمان"
+            >
+              🔐
+            </RouterLink>
             <button
               @click="handleLogout"
               class="btn-secondary text-sm"
