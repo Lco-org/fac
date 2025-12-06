@@ -19,7 +19,6 @@ func NewContainerHandler(containerService *services.ContainerService) *Container
 	}
 }
 
-// ListContainers returns all containers
 func (h *ContainerHandler) ListContainers(c *fiber.Ctx) error {
 	containers, err := h.containerService.ListContainers(c.Context())
 	if err != nil {
@@ -31,7 +30,6 @@ func (h *ContainerHandler) ListContainers(c *fiber.Ctx) error {
 	return c.JSON(containers)
 }
 
-// GetContainer returns a single container
 func (h *ContainerHandler) GetContainer(c *fiber.Ctx) error {
 	idParam := c.Params("id")
 	id, err := uuid.Parse(idParam)
@@ -51,7 +49,6 @@ func (h *ContainerHandler) GetContainer(c *fiber.Ctx) error {
 	return c.JSON(container)
 }
 
-// CreateContainer creates a new container (Admin only)
 func (h *ContainerHandler) CreateContainer(c *fiber.Ctx) error {
 	var req models.FinancialContainer
 	if err := c.BodyParser(&req); err != nil {
@@ -78,7 +75,6 @@ func (h *ContainerHandler) CreateContainer(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(container)
 }
 
-// UpdateContainer updates a container (Admin only)
 func (h *ContainerHandler) UpdateContainer(c *fiber.Ctx) error {
 	idParam := c.Params("id")
 	id, err := uuid.Parse(idParam)
@@ -105,7 +101,6 @@ func (h *ContainerHandler) UpdateContainer(c *fiber.Ctx) error {
 	return c.JSON(container)
 }
 
-// DeleteContainer deletes a container (Admin only)
 func (h *ContainerHandler) DeleteContainer(c *fiber.Ctx) error {
 	idParam := c.Params("id")
 	id, err := uuid.Parse(idParam)
@@ -121,7 +116,6 @@ func (h *ContainerHandler) DeleteContainer(c *fiber.Ctx) error {
 				"error": "Container not found",
 			})
 		}
-		// Check for specific error messages or types
 		if err.Error() == "cannot delete container: associated transactions exist (try deactivating instead)" {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"error": err.Error(),

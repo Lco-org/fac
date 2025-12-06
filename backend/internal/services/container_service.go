@@ -18,9 +18,6 @@ func NewContainerService(db *database.DB) *ContainerService {
 	return &ContainerService{db: db}
 }
 
-// Common errors are defined in errors.go
-
-// ListContainers returns all containers
 func (s *ContainerService) ListContainers(ctx context.Context) ([]models.FinancialContainer, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, name, name_ar, type, currency, balance, bank_name, bank_name_ar, 
@@ -50,7 +47,6 @@ func (s *ContainerService) ListContainers(ctx context.Context) ([]models.Financi
 	return containers, nil
 }
 
-// GetContainerByID retrieves a container by ID
 func (s *ContainerService) GetContainerByID(ctx context.Context, id uuid.UUID) (*models.FinancialContainer, error) {
 	var c models.FinancialContainer
 	err := s.db.QueryRowContext(ctx, `
@@ -71,7 +67,6 @@ func (s *ContainerService) GetContainerByID(ctx context.Context, id uuid.UUID) (
 	return &c, nil
 }
 
-// CreateContainer creates a new container
 func (s *ContainerService) CreateContainer(ctx context.Context, req *models.FinancialContainer, createdBy uuid.UUID) (*models.FinancialContainer, error) {
 	var c models.FinancialContainer
 	err := s.db.QueryRowContext(ctx, `
@@ -99,7 +94,6 @@ func (s *ContainerService) CreateContainer(ctx context.Context, req *models.Fina
 	return &c, nil
 }
 
-// UpdateContainer updates a container
 func (s *ContainerService) UpdateContainer(ctx context.Context, id uuid.UUID, req *models.FinancialContainer) (*models.FinancialContainer, error) {
 	var c models.FinancialContainer
 	err := s.db.QueryRowContext(ctx, `
@@ -129,8 +123,6 @@ func (s *ContainerService) UpdateContainer(ctx context.Context, id uuid.UUID, re
 	return &c, nil
 }
 
-// DeleteContainer deletes a container permanently along with all associated transactions
-// WARNING: This is a CASCADE DELETE - all transactions will be permanently deleted
 func (s *ContainerService) DeleteContainer(ctx context.Context, id uuid.UUID) error {
 	result, err := s.db.ExecContext(ctx, `
 		DELETE FROM financial_containers WHERE id = $1

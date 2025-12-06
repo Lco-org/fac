@@ -19,7 +19,6 @@ func NewTransactionHandler(transactionService *services.TransactionService) *Tra
 	}
 }
 
-// CreateTransaction handles transaction creation with deficit warning
 func (h *TransactionHandler) CreateTransaction(c *fiber.Ctx) error {
 	var req models.CreateTransactionRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -29,7 +28,6 @@ func (h *TransactionHandler) CreateTransaction(c *fiber.Ctx) error {
 		})
 	}
 
-	// Validate required fields
 	if req.Amount <= 0 {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Amount must be greater than 0",
@@ -51,14 +49,12 @@ func (h *TransactionHandler) CreateTransaction(c *fiber.Ctx) error {
 		})
 	}
 
-	// Set default exchange rate if not provided
 	if req.ExchangeRate == 0 {
 		req.ExchangeRate = 1.0
 	}
 
 	userID := middleware.GetUserID(c)
 
-	// Create transaction
 	response, err := h.transactionService.CreateTransaction(c.Context(), &req, userID)
 	if err != nil {
 		if err == services.ErrInsufficientBalance {
@@ -81,16 +77,13 @@ func (h *TransactionHandler) CreateTransaction(c *fiber.Ctx) error {
 		})
 	}
 
-	// If deficit warning, return 202 Accepted with warning
 	if response.DeficitWarning && response.RequiresApproval {
 		return c.Status(fiber.StatusAccepted).JSON(response)
 	}
 
-	// Success
 	return c.Status(fiber.StatusCreated).JSON(response)
 }
 
-// GetTransaction retrieves a transaction by ID
 func (h *TransactionHandler) GetTransaction(c *fiber.Ctx) error {
 	idParam := c.Params("id")
 	id, err := uuid.Parse(idParam)
@@ -110,7 +103,6 @@ func (h *TransactionHandler) GetTransaction(c *fiber.Ctx) error {
 	return c.JSON(transaction)
 }
 
-// ReverseTransaction reverses a transaction (Finance/Admin only)
 func (h *TransactionHandler) ReverseTransaction(c *fiber.Ctx) error {
 	idParam := c.Params("id")
 	id, err := uuid.Parse(idParam)

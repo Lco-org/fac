@@ -19,9 +19,7 @@ func NewTransferService(db *database.DB) *TransferService {
 	return &TransferService{db: db}
 }
 
-// CreateTransfer creates a transfer between two containers
 func (s *TransferService) CreateTransfer(ctx context.Context, req *models.CreateTransferRequest, userID uuid.UUID) (*models.TransferResponse, error) {
-	// Validate request
 	if req.Amount <= 0 {
 		return nil, fmt.Errorf("amount must be greater than 0")
 	}
@@ -30,14 +28,12 @@ func (s *TransferService) CreateTransfer(ctx context.Context, req *models.Create
 		return nil, fmt.Errorf("source and destination containers must be different")
 	}
 
-	// Start transaction
 	tx, err := s.db.BeginTx(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start transaction: %w", err)
 	}
 	defer tx.Rollback()
 
-	// Get source container
 	var fromContainer models.FinancialContainer
 	err = tx.QueryRowContext(ctx, `
 		SELECT id, name, name_ar, type, currency, balance, is_active
@@ -63,7 +59,6 @@ func (s *TransferService) CreateTransfer(ctx context.Context, req *models.Create
 		return nil, fmt.Errorf("source container is not active")
 	}
 
-	// Get destination container
 	var toContainer models.FinancialContainer
 	err = tx.QueryRowContext(ctx, `
 		SELECT id, name, name_ar, type, currency, balance, is_active
@@ -89,28 +84,23 @@ func (s *TransferService) CreateTransfer(ctx context.Context, req *models.Create
 		return nil, fmt.Errorf("destination container is not active")
 	}
 
-	// Validate currency match
 	if fromContainer.Currency != toContainer.Currency {
 		return nil, fmt.Errorf("currency mismatch: source container is %s but destination is %s", fromContainer.Currency, toContainer.Currency)
 	}
 
-	// Validate currency in request matches containers
 	if req.Currency != fromContainer.Currency {
 		return nil, fmt.Errorf("request currency %s does not match container currency %s", req.Currency, fromContainer.Currency)
 	}
 
-	// Check sufficient balance
 	if fromContainer.Balance < req.Amount {
 		return nil, ErrInsufficientBalance
 	}
 
-	// Generate transaction number (simplified - consider using a sequence)
 	transactionDate := time.Now()
 	if req.TransactionDate != nil {
 		transactionDate = *req.TransactionDate
 	}
 
-	// Create debit transaction (withdrawal from source)
 	debitID := uuid.New()
 	debitNumber := fmt.Sprintf("TRF-OUT-%s", debitID.String()[:8])
 
@@ -136,7 +126,7 @@ func (s *TransferService) CreateTransfer(ctx context.Context, req *models.Create
 		1.0,
 		req.Amount,
 		req.FromContainerID,
-		nil, // No project for transfers
+		nil,
 		req.Description,
 		req.DescriptionAr,
 		req.ReferenceNumber,
@@ -151,7 +141,6 @@ func (s *TransferService) CreateTransfer(ctx context.Context, req *models.Create
 		return nil, fmt.Errorf("failed to create debit transaction: %w", err)
 	}
 
-	// Create credit transaction (deposit to destination)
 	creditID := uuid.New()
 	creditNumber := fmt.Sprintf("TRF-IN-%s", creditID.String()[:8])
 
@@ -177,7 +166,7 @@ func (s *TransferService) CreateTransfer(ctx context.Context, req *models.Create
 		1.0,
 		req.Amount,
 		req.ToContainerID,
-		nil, // No project for transfers
+		nil,
 		req.Description,
 		req.DescriptionAr,
 		req.ReferenceNumber,
@@ -187,13 +176,12 @@ func (s *TransferService) CreateTransfer(ctx context.Context, req *models.Create
 		balanceAfterCredit,
 		transactionDate,
 		userID,
-		debitID, // Link to debit transaction
+		debitID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create credit transaction: %w", err)
 	}
 
-	// Update source container balance
 	_, err = tx.ExecContext(ctx, `
 		UPDATE financial_containers
 		SET balance = balance - $1, updated_at = CURRENT_TIMESTAMP
@@ -203,7 +191,6 @@ func (s *TransferService) CreateTransfer(ctx context.Context, req *models.Create
 		return nil, fmt.Errorf("failed to update source container balance: %w", err)
 	}
 
-	// Update destination container balance
 	_, err = tx.ExecContext(ctx, `
 		UPDATE financial_containers
 		SET balance = balance + $1, updated_at = CURRENT_TIMESTAMP
@@ -213,12 +200,10 @@ func (s *TransferService) CreateTransfer(ctx context.Context, req *models.Create
 		return nil, fmt.Errorf("failed to update destination container balance: %w", err)
 	}
 
-	// Commit transaction
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("failed to commit transfer: %w", err)
 	}
 
-	// Fetch the created transactions
 	debitTx, err := s.getTransactionByID(ctx, debitID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch debit transaction: %w", err)
@@ -248,7 +233,6 @@ func (s *TransferService) CreateTransfer(ctx context.Context, req *models.Create
 	}, nil
 }
 
-// getTransactionByID retrieves a transaction by ID
 func (s *TransferService) getTransactionByID(ctx context.Context, id uuid.UUID) (*models.Transaction, error) {
 	var tx models.Transaction
 	err := s.db.QueryRowContext(ctx, `

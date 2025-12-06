@@ -19,7 +19,6 @@ func NewTransferHandler(transferService *services.TransferService) *TransferHand
 	}
 }
 
-// CreateTransfer handles transfer creation between containers
 func (h *TransferHandler) CreateTransfer(c *fiber.Ctx) error {
 	var req models.CreateTransferRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -29,7 +28,6 @@ func (h *TransferHandler) CreateTransfer(c *fiber.Ctx) error {
 		})
 	}
 
-	// Validate required fields
 	if req.Amount <= 0 {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Amount must be greater than 0",
@@ -58,7 +56,6 @@ func (h *TransferHandler) CreateTransfer(c *fiber.Ctx) error {
 
 	userID := middleware.GetUserID(c)
 
-	// Create transfer
 	response, err := h.transferService.CreateTransfer(c.Context(), &req, userID)
 	if err != nil {
 		if err == services.ErrInsufficientBalance {
@@ -71,7 +68,6 @@ func (h *TransferHandler) CreateTransfer(c *fiber.Ctx) error {
 				"error": "Container not found",
 			})
 		}
-		// Check for currency mismatch
 		if err.Error() == "currency mismatch" ||
 			len(err.Error()) > 17 && err.Error()[:17] == "currency mismatch" {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -84,6 +80,5 @@ func (h *TransferHandler) CreateTransfer(c *fiber.Ctx) error {
 		})
 	}
 
-	// Success
 	return c.Status(fiber.StatusCreated).JSON(response)
 }

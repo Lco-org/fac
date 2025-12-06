@@ -19,7 +19,6 @@ func NewReceiptService(db *database.DB) *ReceiptService {
 	return &ReceiptService{db: db}
 }
 
-// ReceiptData represents all data needed for a receipt
 type ReceiptData struct {
 	Transaction        models.Transaction         `json:"transaction"`
 	Container          models.FinancialContainer  `json:"container"`
@@ -29,18 +28,15 @@ type ReceiptData struct {
 	RelatedContainer   *models.FinancialContainer `json:"related_container,omitempty"`
 }
 
-// UserBasicInfo represents basic user information for receipts
 type UserBasicInfo struct {
 	ID         uuid.UUID `json:"id"`
 	FullName   string    `json:"full_name"`
 	FullNameAr *string   `json:"full_name_ar,omitempty"`
 }
 
-// GetReceiptData retrieves complete receipt data for a transaction
 func (s *ReceiptService) GetReceiptData(ctx context.Context, transactionID uuid.UUID) (*ReceiptData, error) {
 	var receipt ReceiptData
 
-	// Get transaction details
 	err := s.db.QueryRowContext(ctx, `
 		SELECT 
 			t.id, t.transaction_number, t.type, t.status, t.amount, t.currency, 
@@ -92,7 +88,6 @@ func (s *ReceiptService) GetReceiptData(ctx context.Context, transactionID uuid.
 		return nil, err
 	}
 
-	// Get container details
 	err = s.db.QueryRowContext(ctx, `
 		SELECT 
 			id, name, name_ar, type, currency, balance,
@@ -124,7 +119,6 @@ func (s *ReceiptService) GetReceiptData(ctx context.Context, transactionID uuid.
 		return nil, err
 	}
 
-	// Get project details (skip for transfers as they don't have projects)
 	if receipt.Transaction.ProjectID != uuid.Nil {
 		err = s.db.QueryRowContext(ctx, `
 			SELECT 
@@ -155,7 +149,6 @@ func (s *ReceiptService) GetReceiptData(ctx context.Context, transactionID uuid.
 			return nil, err
 		}
 	} else {
-		// For transfers, create a dummy project
 		receipt.Project.ID = uuid.Nil
 		receipt.Project.Code = "-"
 		receipt.Project.Name = "تحويل داخلي"
@@ -165,7 +158,6 @@ func (s *ReceiptService) GetReceiptData(ctx context.Context, transactionID uuid.
 		receipt.Project.IsActive = true
 	}
 
-	// Get user who created the transaction
 	err = s.db.QueryRowContext(ctx, `
 		SELECT id, full_name, full_name_ar
 		FROM users
@@ -180,27 +172,22 @@ func (s *ReceiptService) GetReceiptData(ctx context.Context, transactionID uuid.
 		return nil, err
 	}
 
-	// Handle Transfer details: find the related transaction to show "From" and "To"
 	if receipt.Transaction.Type == models.TransactionTransfer {
 		var relatedTxID uuid.UUID
 
-		// If this is the credit side (has original_transaction_id), the related is the debit (original)
 		if receipt.Transaction.OriginalTransactionID != nil {
 			relatedTxID = *receipt.Transaction.OriginalTransactionID
 		} else {
-			// If this is the debit side, we need to find the credit transaction that points to this one
 			err := s.db.QueryRowContext(ctx, `
 				SELECT id FROM transactions WHERE original_transaction_id = $1
 			`, receipt.Transaction.ID).Scan(&relatedTxID)
 
 			if err != nil && err != sql.ErrNoRows {
-				// Log error but don't fail the whole receipt
 				fmt.Printf("Error finding related transfer transaction: %v\n", err)
 			}
 		}
 
 		if relatedTxID != uuid.Nil {
-			// Fetch related transaction
 			var relatedTx models.Transaction
 			err := s.db.QueryRowContext(ctx, `
 				SELECT id, container_id, type, amount, currency
@@ -216,7 +203,6 @@ func (s *ReceiptService) GetReceiptData(ctx context.Context, transactionID uuid.
 			if err == nil {
 				receipt.RelatedTransaction = &relatedTx
 
-				// Fetch related container
 				var relatedContainer models.FinancialContainer
 				err = s.db.QueryRowContext(ctx, `
 					SELECT id, name, name_ar, type, currency

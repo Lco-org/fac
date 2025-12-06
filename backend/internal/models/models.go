@@ -22,8 +22,8 @@ type User struct {
 	FullName         string     `json:"full_name"`
 	FullNameAr       *string    `json:"full_name_ar,omitempty"`
 	Role             UserRole   `json:"role"`
-	TokenVersion     int        `json:"-"`                  // Incremented to invalidate all sessions (Kill Switch)
-	TwoFactorEnabled bool       `json:"two_factor_enabled"` // Email-based 2FA
+	TokenVersion     int        `json:"-"`
+	TwoFactorEnabled bool       `json:"two_factor_enabled"`
 	IsActive         bool       `json:"is_active"`
 	LastLogin        *time.Time `json:"last_login,omitempty"`
 	CreatedAt        time.Time  `json:"created_at"`
@@ -139,8 +139,6 @@ type Transaction struct {
 	OriginalTransactionID *uuid.UUID        `json:"original_transaction_id,omitempty"`
 }
 
-// Request/Response DTOs
-
 type LoginRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
@@ -190,7 +188,6 @@ type TransactionResponse struct {
 	Message          string      `json:"message,omitempty"`
 }
 
-// ContainerStatement represents detailed financial statement for a container
 type ContainerStatement struct {
 	Container    FinancialContainer        `json:"container"`
 	Transactions []TransactionDetail       `json:"transactions"`
@@ -223,7 +220,6 @@ type TransactionDetail struct {
 	CreatedAt         time.Time       `json:"created_at"`
 }
 
-// ProjectStatement represents detailed financial statement for a project
 type ProjectStatement struct {
 	Project      Project                    `json:"project"`
 	Transactions []ProjectTransactionDetail `json:"transactions"`
@@ -260,7 +256,6 @@ type ProjectDashboardSummary struct {
 	LastTransactions []ProjectTransactionDetail `json:"last_transactions"`
 }
 
-// DashboardWidget represents a configurable dashboard widget
 type DashboardWidget struct {
 	ID           uuid.UUID `json:"id"`
 	WidgetKey    string    `json:"widget_key"`
@@ -273,14 +268,12 @@ type DashboardWidget struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
-// UpdateWidgetConfigRequest for updating widget configuration
 type UpdateWidgetConfigRequest struct {
 	IsEnabled    *bool    `json:"is_enabled,omitempty"`
 	AllowedRoles []string `json:"allowed_roles,omitempty"`
 	DisplayOrder *int     `json:"display_order,omitempty"`
 }
 
-// WidgetOrderUpdate for bulk updating widget display order
 type WidgetOrderUpdate struct {
 	ID           string `json:"id"`
 	DisplayOrder int    `json:"display_order"`
@@ -292,13 +285,11 @@ type DailyPosition struct {
 	GeneratedAt    time.Time            `json:"generated_at"`
 }
 
-// CurrencyAmount represents an amount in a specific currency
 type CurrencyAmount struct {
 	Currency CurrencyCode `json:"currency"`
 	Amount   float64      `json:"amount"`
 }
 
-// FinancialSummary represents organization-wide financial totals
 type FinancialSummary struct {
 	TotalBalance  []CurrencyAmount `json:"total_balance"`
 	TotalIncome   []CurrencyAmount `json:"total_income"`
@@ -323,7 +314,6 @@ type ProjectTransactionDetail struct {
 	CreatedAt         time.Time       `json:"created_at"`
 }
 
-// Employee represents an organization employee
 type Employee struct {
 	ID             uuid.UUID  `json:"id"`
 	EmployeeNumber string     `json:"employee_number"`
@@ -343,7 +333,6 @@ type Employee struct {
 	CreatedBy      *uuid.UUID `json:"created_by,omitempty"`
 }
 
-// Member represents an affiliated member
 type Member struct {
 	ID               uuid.UUID  `json:"id"`
 	MembershipNumber string     `json:"membership_number"`
@@ -362,7 +351,6 @@ type Member struct {
 	CreatedBy        *uuid.UUID `json:"created_by,omitempty"`
 }
 
-// CreateEmployeeRequest for creating new employees
 type CreateEmployeeRequest struct {
 	EmployeeNumber string     `json:"employee_number"`
 	FullName       string     `json:"full_name"`
@@ -377,7 +365,6 @@ type CreateEmployeeRequest struct {
 	JoinDate       *time.Time `json:"join_date,omitempty"`
 }
 
-// UpdateEmployeeRequest for updating employees
 type UpdateEmployeeRequest struct {
 	FullName     *string    `json:"full_name,omitempty"`
 	FullNameAr   *string    `json:"full_name_ar,omitempty"`
@@ -392,7 +379,6 @@ type UpdateEmployeeRequest struct {
 	IsActive     *bool      `json:"is_active,omitempty"`
 }
 
-// CreateMemberRequest for creating new members
 type CreateMemberRequest struct {
 	MembershipNumber string     `json:"membership_number"`
 	FullName         string     `json:"full_name"`
@@ -405,7 +391,6 @@ type CreateMemberRequest struct {
 	JoinDate         *time.Time `json:"join_date,omitempty"`
 }
 
-// UpdateMemberRequest for updating members
 type UpdateMemberRequest struct {
 	FullName   *string    `json:"full_name,omitempty"`
 	FullNameAr *string    `json:"full_name_ar,omitempty"`
@@ -419,7 +404,6 @@ type UpdateMemberRequest struct {
 	IsActive   *bool      `json:"is_active,omitempty"`
 }
 
-// CreateProjectRequest for creating new projects
 type CreateProjectRequest struct {
 	Code        string       `json:"code"`
 	Name        string       `json:"name"`
@@ -433,7 +417,6 @@ type CreateProjectRequest struct {
 	Currency    CurrencyCode `json:"currency"`
 }
 
-// UpdateProjectRequest for updating projects
 type UpdateProjectRequest struct {
 	Name        *string       `json:"name,omitempty"`
 	NameAr      *string       `json:"name_ar,omitempty"`
@@ -447,7 +430,6 @@ type UpdateProjectRequest struct {
 	IsActive    *bool         `json:"is_active,omitempty"`
 }
 
-// CreateTransferRequest for creating transfers between containers
 type CreateTransferRequest struct {
 	FromContainerID uuid.UUID    `json:"from_container_id"`
 	ToContainerID   uuid.UUID    `json:"to_container_id"`
@@ -459,9 +441,8 @@ type CreateTransferRequest struct {
 	TransactionDate *time.Time   `json:"transaction_date,omitempty"`
 }
 
-// TransferResponse represents the response after creating a transfer
 type TransferResponse struct {
+	Message           string      `json:"message"`
 	DebitTransaction  Transaction `json:"debit_transaction"`
 	CreditTransaction Transaction `json:"credit_transaction"`
-	Message           string      `json:"message"`
 }

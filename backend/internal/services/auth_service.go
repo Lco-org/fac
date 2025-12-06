@@ -12,7 +12,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// AuthService handles authentication operations with enhanced security
 type AuthService struct {
 	db           *database.DB
 	cfg          *config.Config
@@ -21,7 +20,6 @@ type AuthService struct {
 	emailService *EmailService
 }
 
-// NewAuthService creates a new authentication service
 func NewAuthService(db *database.DB, cfg *config.Config, emailService *EmailService) *AuthService {
 	return &AuthService{
 		db:           db,
@@ -33,19 +31,13 @@ func NewAuthService(db *database.DB, cfg *config.Config, emailService *EmailServ
 }
 
 var (
-	// ErrInvalidCredentials indicates authentication failure
-	ErrInvalidCredentials = errors.New("invalid username or password")
-	// ErrUserNotActive indicates the user account is disabled
-	ErrUserNotActive = errors.New("user account is not active")
-	// ErrEmailDomainNotAllowed indicates email is not from allowed domain
+	ErrInvalidCredentials    = errors.New("invalid username or password")
+	ErrUserNotActive         = errors.New("user account is not active")
 	ErrEmailDomainNotAllowed = errors.New("only @lco.org.ly email addresses are allowed")
-	// ErrWeakPassword indicates the password doesn't meet requirements
-	ErrWeakPassword = errors.New("password must be at least 8 characters")
-	// Err2FARequired indicates 2FA verification is needed
-	Err2FARequired = errors.New("2FA verification required")
+	ErrWeakPassword          = errors.New("password must be at least 8 characters")
+	Err2FARequired           = errors.New("2FA verification required")
 )
 
-// LoginResult represents the result of a login attempt
 type LoginResult struct {
 	User          *models.User
 	Requires2FA   bool
@@ -53,13 +45,10 @@ type LoginResult struct {
 	Message       string
 }
 
-// Login authenticates user credentials (Step 1 of 2FA flow)
-// If 2FA is enabled, returns Requires2FA=true and user must call Verify2FA
 func (s *AuthService) Login(ctx context.Context, username, password string) (*LoginResult, error) {
 	var user models.User
 	var passwordHash string
 
-	// Fetch user with all required fields
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, username, email, password_hash, full_name, full_name_ar, 
 		       role, token_version, two_factor_enabled, is_active, created_at
@@ -90,36 +79,30 @@ func (s *AuthService) Login(ctx context.Context, username, password string) (*Lo
 		return nil, ErrUserNotActive
 	}
 
-	// Verify password using Argon2id
 	valid, err := security.VerifyPassword(password, passwordHash)
 	if err != nil || !valid {
 		return nil, ErrInvalidCredentials
 	}
 
-	// Check if 2FA is enabled
 	if user.TwoFactorEnabled {
-		// Generate and send OTP
 		code, err := s.otpService.GenerateOTP(user.ID)
 		if err != nil {
 			return nil, err
 		}
 
-		// Send OTP via email
 		err = s.emailService.SendOTPEmail(ctx, user.Email, user.FullName, code)
 		if err != nil {
 			return nil, errors.New("failed to send verification code")
 		}
 
 		return &LoginResult{
-			User:          nil, // Don't return user yet
+			User:          nil,
 			Requires2FA:   true,
 			PendingUserID: user.ID,
 			Message:       "Verification code sent to your email",
 		}, nil
 	}
 
-	// No 2FA - complete login immediately
-	// Update last login timestamp
 	_, _ = s.db.ExecContext(ctx, `
 		UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1
 	`, user.ID)
@@ -130,21 +113,17 @@ func (s *AuthService) Login(ctx context.Context, username, password string) (*Lo
 	}, nil
 }
 
-// Verify2FA completes the login after OTP verification (Step 2 of 2FA flow)
 func (s *AuthService) Verify2FA(ctx context.Context, userID uuid.UUID, code string) (*models.User, error) {
-	// Verify OTP
 	err := s.otpService.VerifyOTP(userID, code)
 	if err != nil {
 		return nil, err
 	}
 
-	// Get user data
 	user, err := s.GetUserByID(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Update last login
 	_, _ = s.db.ExecContext(ctx, `
 		UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1
 	`, userID)
@@ -152,9 +131,7 @@ func (s *AuthService) Verify2FA(ctx context.Context, userID uuid.UUID, code stri
 	return user, nil
 }
 
-// ResendOTP generates and sends a new OTP code
 func (s *AuthService) ResendOTP(ctx context.Context, userID uuid.UUID) error {
-	// Get user email
 	var email, fullName string
 	err := s.db.QueryRowContext(ctx, `
 		SELECT email, full_name FROM users WHERE id = $1
@@ -163,20 +140,15 @@ func (s *AuthService) ResendOTP(ctx context.Context, userID uuid.UUID) error {
 		return err
 	}
 
-	// Generate new OTP
 	code, err := s.otpService.GenerateOTP(userID)
 	if err != nil {
 		return err
 	}
 
-	// Send OTP via email
 	return s.emailService.SendOTPEmail(ctx, email, fullName, code)
 }
 
-// CreateUser creates a new user with Argon2id password hashing
-// Validates email domain restriction to @lco.org.ly
 func (s *AuthService) CreateUser(ctx context.Context, username, email, password, fullName string, role models.UserRole, createdBy uuid.UUID) (*models.User, error) {
-	// Validate email domain
 	if err := security.ValidateEmail(email); err != nil {
 		if err == security.ErrUnauthorizedDomain {
 			return nil, ErrEmailDomainNotAllowed
@@ -184,19 +156,16 @@ func (s *AuthService) CreateUser(ctx context.Context, username, email, password,
 		return nil, err
 	}
 
-	// Validate password strength
 	if len(password) < 8 {
 		return nil, ErrWeakPassword
 	}
 
-	// Hash password using Argon2id with secure defaults
 	hashedPassword, err := security.HashPassword(password, nil)
 	if err != nil {
 		return nil, err
 	}
 
 	var user models.User
-	// Use NULL for created_by during self-registration
 	var createdByPtr *uuid.UUID
 	if createdBy != uuid.Nil {
 		createdByPtr = &createdBy
@@ -225,7 +194,6 @@ func (s *AuthService) CreateUser(ctx context.Context, username, email, password,
 	return &user, nil
 }
 
-// GetUserByID retrieves user by ID
 func (s *AuthService) GetUserByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
 	var user models.User
 
@@ -255,8 +223,6 @@ func (s *AuthService) GetUserByID(ctx context.Context, id uuid.UUID) (*models.Us
 	return &user, nil
 }
 
-// RevokeAllSessions increments token version to invalidate all existing sessions
-// This is the "Kill Switch" functionality
 func (s *AuthService) RevokeAllSessions(ctx context.Context, userID uuid.UUID) error {
 	result, err := s.db.ExecContext(ctx, `
 		UPDATE users 
@@ -280,14 +246,11 @@ func (s *AuthService) RevokeAllSessions(ctx context.Context, userID uuid.UUID) e
 	return nil
 }
 
-// ChangePassword updates user password and invalidates all sessions
 func (s *AuthService) ChangePassword(ctx context.Context, userID uuid.UUID, oldPassword, newPassword string) error {
-	// Validate new password strength
 	if len(newPassword) < 8 {
 		return ErrWeakPassword
 	}
 
-	// Get current password hash
 	var currentHash string
 	err := s.db.QueryRowContext(ctx, `
 		SELECT password_hash FROM users WHERE id = $1
@@ -297,19 +260,16 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID uuid.UUID, oldP
 		return err
 	}
 
-	// Verify old password
 	valid, err := security.VerifyPassword(oldPassword, currentHash)
 	if err != nil || !valid {
 		return ErrInvalidCredentials
 	}
 
-	// Hash new password
 	newHash, err := security.HashPassword(newPassword, nil)
 	if err != nil {
 		return err
 	}
 
-	// Update password and increment token version to invalidate sessions
 	_, err = s.db.ExecContext(ctx, `
 		UPDATE users 
 		SET password_hash = $1, 
@@ -321,7 +281,6 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID uuid.UUID, oldP
 	return err
 }
 
-// Toggle2FA enables or disables 2FA for a user
 func (s *AuthService) Toggle2FA(ctx context.Context, userID uuid.UUID, enabled bool) error {
 	_, err := s.db.ExecContext(ctx, `
 		UPDATE users SET two_factor_enabled = $1, updated_at = CURRENT_TIMESTAMP
@@ -330,8 +289,6 @@ func (s *AuthService) Toggle2FA(ctx context.Context, userID uuid.UUID, enabled b
 	return err
 }
 
-// ValidateTokenVersion checks if the token version matches the database
-// Used by AuthMiddleware for zero-trust validation
 func (s *AuthService) ValidateTokenVersion(ctx context.Context, userID uuid.UUID, tokenVersion int) (bool, error) {
 	var currentVersion int
 	err := s.db.QueryRowContext(ctx, `
@@ -348,7 +305,6 @@ func (s *AuthService) ValidateTokenVersion(ctx context.Context, userID uuid.UUID
 	return currentVersion == tokenVersion, nil
 }
 
-// GetAuditService returns the audit service for logging
 func (s *AuthService) GetAuditService() *security.AuditService {
 	return s.auditService
 }

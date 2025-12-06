@@ -20,11 +20,6 @@ func NewTransactionService(db *database.DB) *TransactionService {
 	return &TransactionService{db: db}
 }
 
-var (
-// Specific transaction errors can remain here if needed
-)
-
-// CreateTransaction handles the complete transaction creation with deficit handling
 func (s *TransactionService) CreateTransaction(ctx context.Context, req *models.CreateTransactionRequest, userID uuid.UUID) (*models.TransactionResponse, error) {
 	if req.Amount <= 0 {
 		return nil, ErrInvalidAmount
@@ -33,9 +28,7 @@ func (s *TransactionService) CreateTransaction(ctx context.Context, req *models.
 	var response models.TransactionResponse
 	var transaction models.Transaction
 
-	// Execute within database transaction
 	err := s.db.WithTransaction(ctx, func(tx *sql.Tx) error {
-		// 1. Get current container balance (with row lock)
 		var container models.FinancialContainer
 		err := tx.QueryRowContext(ctx, `
 			SELECT id, name, type, currency, balance, is_active
@@ -57,7 +50,6 @@ func (s *TransactionService) CreateTransaction(ctx context.Context, req *models.
 			return fmt.Errorf("failed to get container: %w", err)
 		}
 
-		// 2. Verify project exists
 		var projectExists bool
 		err = tx.QueryRowContext(ctx, `
 			SELECT EXISTS(SELECT 1 FROM projects WHERE id = $1 AND is_active = TRUE)
@@ -69,7 +61,6 @@ func (s *TransactionService) CreateTransaction(ctx context.Context, req *models.
 			return ErrProjectNotFound
 		}
 
-		// 3. Calculate new balance based on transaction type
 		balanceBefore := container.Balance
 		var balanceAfter float64
 		isIncome := req.Type == models.TransactionIncomeGrant || req.Type == models.TransactionIncomeDonation
@@ -80,12 +71,10 @@ func (s *TransactionService) CreateTransaction(ctx context.Context, req *models.
 			balanceAfter = balanceBefore - req.Amount
 		}
 
-		// 4. Check for deficit situation
 		isDeficit := balanceAfter < 0
 		deficitWarning := false
 
 		if isDeficit && !req.ConfirmDeficit {
-			// User needs to confirm deficit
 			response.DeficitWarning = true
 			response.RequiresApproval = true
 			response.Message = fmt.Sprintf(
@@ -94,23 +83,20 @@ func (s *TransactionService) CreateTransaction(ctx context.Context, req *models.
 				req.Amount, req.Currency,
 				balanceAfter, container.Currency,
 			)
-			return nil // Don't create transaction, just return warning
+			return nil
 		}
 
 		if isDeficit {
 			deficitWarning = true
 		}
 
-		// 5. Set transaction date
 		transactionDate := time.Now()
 		if req.TransactionDate != nil {
 			transactionDate = *req.TransactionDate
 		}
 
-		// 6. Calculate local amount
 		amountLocal := req.Amount * req.ExchangeRate
 
-		// 7. Insert transaction
 		err = tx.QueryRowContext(ctx, `
 			INSERT INTO transactions (
 				type, status, amount, currency, exchange_rate, amount_local,
@@ -134,7 +120,6 @@ func (s *TransactionService) CreateTransaction(ctx context.Context, req *models.
 			return fmt.Errorf("failed to insert transaction: %w", err)
 		}
 
-		// 8. Update container balance
 		_, err = tx.ExecContext(ctx, `
 			UPDATE financial_containers
 			SET balance = $1, updated_at = CURRENT_TIMESTAMP
@@ -145,7 +130,6 @@ func (s *TransactionService) CreateTransaction(ctx context.Context, req *models.
 			return fmt.Errorf("failed to update container balance: %w", err)
 		}
 
-		// 9. Build complete transaction object
 		transaction.Type = req.Type
 		transaction.Status = models.TransactionCompleted
 		transaction.Amount = req.Amount
@@ -182,7 +166,6 @@ func (s *TransactionService) CreateTransaction(ctx context.Context, req *models.
 		return nil, err
 	}
 
-	// If we got here without a transaction ID, it means we returned early with a warning
 	if response.Transaction.ID == uuid.Nil && response.DeficitWarning {
 		return &response, nil
 	}
@@ -190,7 +173,6 @@ func (s *TransactionService) CreateTransaction(ctx context.Context, req *models.
 	return &response, nil
 }
 
-// GetTransactionByID retrieves a transaction by ID
 func (s *TransactionService) GetTransactionByID(ctx context.Context, id uuid.UUID) (*models.Transaction, error) {
 	var t models.Transaction
 
@@ -221,10 +203,8 @@ func (s *TransactionService) GetTransactionByID(ctx context.Context, id uuid.UUI
 	return &t, nil
 }
 
-// ReverseTransaction creates a reversal transaction
 func (s *TransactionService) ReverseTransaction(ctx context.Context, transactionID uuid.UUID, reason string, userID uuid.UUID) error {
 	return s.db.WithTransaction(ctx, func(tx *sql.Tx) error {
-		// Get original transaction
 		var original models.Transaction
 		err := tx.QueryRowContext(ctx, `
 			SELECT id, type, amount, currency, exchange_rate, container_id, project_id, status
@@ -243,7 +223,6 @@ func (s *TransactionService) ReverseTransaction(ctx context.Context, transaction
 			return errors.New("transaction already reversed")
 		}
 
-		// Mark original as reversed
 		_, err = tx.ExecContext(ctx, `
 			UPDATE transactions
 			SET status = $1, reversed_at = CURRENT_TIMESTAMP, reversed_by = $2, reversal_reason = $3
@@ -253,7 +232,6 @@ func (s *TransactionService) ReverseTransaction(ctx context.Context, transaction
 			return err
 		}
 
-		// Create opposite transaction
 		isIncome := original.Type == models.TransactionIncomeGrant || original.Type == models.TransactionIncomeDonation
 		var reversalType models.TransactionType
 		if isIncome {

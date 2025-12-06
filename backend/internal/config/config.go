@@ -10,7 +10,6 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// Config holds all application configuration
 type Config struct {
 	App      AppConfig
 	Database DatabaseConfig
@@ -21,14 +20,12 @@ type Config struct {
 	Email    EmailConfig
 }
 
-// AppConfig holds application settings
 type AppConfig struct {
 	Env  string
 	Port string
 	Host string
 }
 
-// DatabaseConfig holds database connection settings
 type DatabaseConfig struct {
 	Host     string
 	Port     string
@@ -38,43 +35,32 @@ type DatabaseConfig struct {
 	SSLMode  string
 }
 
-// JWTConfig holds JWT token settings
 type JWTConfig struct {
 	Secret        string
 	Expiry        time.Duration
 	RefreshExpiry time.Duration
 }
 
-// SecurityConfig holds security-related settings
 type SecurityConfig struct {
-	// EncryptionKey is a 32-byte key for AES-256-GCM encryption
-	// Must be hex-encoded (64 characters)
-	EncryptionKey []byte
-
-	// Argon2 password hashing parameters
-	Argon2Memory      uint32 // Memory in KB (default: 65536 = 64MB)
-	Argon2Iterations  uint32 // Time cost (default: 3)
-	Argon2Parallelism uint8  // CPU threads (default: 4)
-
-	// Rate limiting
-	RateLimitMax    int
-	RateLimitWindow time.Duration
-	CookieSecure    bool
+	EncryptionKey     []byte
+	Argon2Memory      uint32
+	Argon2Iterations  uint32
+	Argon2Parallelism uint8
+	RateLimitMax      int
+	RateLimitWindow   time.Duration
+	CookieSecure      bool
 }
 
-// CORSConfig holds CORS settings
 type CORSConfig struct {
 	Origin      string
 	Credentials bool
 }
 
-// UploadConfig holds file upload settings
 type UploadConfig struct {
 	MaxFileSize int64
 	UploadDir   string
 }
 
-// EmailConfig holds SMTP email settings for 2FA
 type EmailConfig struct {
 	SMTPHost    string
 	SMTPPort    string
@@ -83,12 +69,10 @@ type EmailConfig struct {
 	FromAddress string
 	FromName    string
 	UseTLS      bool
-	SkipVerify  bool // For development only
+	SkipVerify  bool
 }
 
-// Load loads configuration from environment variables
 func Load() *Config {
-	// Load .env file
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, using environment variables")
 	}
@@ -97,7 +81,6 @@ func Load() *Config {
 	jwtRefreshExpiry, _ := time.ParseDuration(getEnv("JWT_REFRESH_EXPIRY", "168h"))
 	rateLimitWindow, _ := time.ParseDuration(getEnv("RATE_LIMIT_WINDOW", "1m"))
 
-	// Parse encryption key from hex
 	encryptionKey := parseEncryptionKey(getEnv("ENCRYPTION_KEY", ""))
 
 	return &Config{
@@ -149,8 +132,6 @@ func Load() *Config {
 	}
 }
 
-// parseEncryptionKey parses a hex-encoded encryption key
-// Returns a 32-byte key for AES-256 or nil if not configured
 func parseEncryptionKey(hexKey string) []byte {
 	if hexKey == "" {
 		log.Println("⚠️  ENCRYPTION_KEY not set - data encryption disabled")

@@ -17,7 +17,6 @@ func NewReceiptHandler(receiptService *services.ReceiptService) *ReceiptHandler 
 	}
 }
 
-// GetReceiptData retrieves complete data for a transaction receipt
 func (h *ReceiptHandler) GetReceiptData(c *fiber.Ctx) error {
 	idParam := c.Params("id")
 	id, err := uuid.Parse(idParam)

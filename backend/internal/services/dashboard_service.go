@@ -17,7 +17,6 @@ func NewDashboardService(db *database.DB) *DashboardService {
 	return &DashboardService{db: db}
 }
 
-// GetWidgetConfigs retrieves all dashboard widget configurations
 func (s *DashboardService) GetWidgetConfigs(ctx context.Context) ([]models.DashboardWidget, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, widget_key, widget_name, widget_name_en, is_enabled, 
@@ -47,7 +46,6 @@ func (s *DashboardService) GetWidgetConfigs(ctx context.Context) ([]models.Dashb
 	return widgets, nil
 }
 
-// GetVisibleWidgets retrieves widgets visible to a specific role
 func (s *DashboardService) GetVisibleWidgets(ctx context.Context, userRole string) ([]models.DashboardWidget, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, widget_key, widget_name, widget_name_en, is_enabled, 
@@ -78,7 +76,6 @@ func (s *DashboardService) GetVisibleWidgets(ctx context.Context, userRole strin
 	return widgets, nil
 }
 
-// UpdateWidgetConfig updates a widget configuration
 func (s *DashboardService) UpdateWidgetConfig(ctx context.Context, widgetID string, req models.UpdateWidgetConfigRequest) error {
 	query := "UPDATE dashboard_widgets SET updated_at = CURRENT_TIMESTAMP"
 	args := []interface{}{}
@@ -122,7 +119,6 @@ func (s *DashboardService) UpdateWidgetConfig(ctx context.Context, widgetID stri
 	return nil
 }
 
-// BulkUpdateWidgetOrder updates display order for multiple widgets in a transaction
 func (s *DashboardService) BulkUpdateWidgetOrder(ctx context.Context, updates []models.WidgetOrderUpdate) error {
 	tx, err := s.db.BeginTx(ctx)
 	if err != nil {

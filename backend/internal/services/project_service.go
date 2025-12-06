@@ -17,7 +17,6 @@ func NewProjectService(db *database.DB) *ProjectService {
 	return &ProjectService{db: db}
 }
 
-// ListProjects returns all projects
 func (s *ProjectService) ListProjects(ctx context.Context) ([]models.Project, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, code, name, name_ar, description, donor_name, donor_name_ar,
@@ -47,7 +46,6 @@ func (s *ProjectService) ListProjects(ctx context.Context) ([]models.Project, er
 	return projects, nil
 }
 
-// GetProjectByID retrieves a project by ID
 func (s *ProjectService) GetProjectByID(ctx context.Context, id uuid.UUID) (*models.Project, error) {
 	var p models.Project
 	err := s.db.QueryRowContext(ctx, `
@@ -68,9 +66,7 @@ func (s *ProjectService) GetProjectByID(ctx context.Context, id uuid.UUID) (*mod
 	return &p, nil
 }
 
-// CreateProject creates a new project
 func (s *ProjectService) CreateProject(ctx context.Context, req *models.CreateProjectRequest, createdBy uuid.UUID) (*models.Project, error) {
-	// Check if code exists
 	var exists bool
 	err := s.db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM projects WHERE code = $1)", req.Code).Scan(&exists)
 	if err != nil {
@@ -101,7 +97,6 @@ func (s *ProjectService) CreateProject(ctx context.Context, req *models.CreatePr
 	return &p, nil
 }
 
-// UpdateProject updates a project
 func (s *ProjectService) UpdateProject(ctx context.Context, id uuid.UUID, req *models.UpdateProjectRequest) (*models.Project, error) {
 	var p models.Project
 	err := s.db.QueryRowContext(ctx, `
@@ -134,7 +129,6 @@ func (s *ProjectService) UpdateProject(ctx context.Context, id uuid.UUID, req *m
 	return &p, nil
 }
 
-// DeleteProject deletes a project
 func (s *ProjectService) DeleteProject(ctx context.Context, id uuid.UUID) error {
 	result, err := s.db.ExecContext(ctx, `
 		DELETE FROM projects WHERE id = $1

@@ -12,13 +12,11 @@ import (
 	"github.com/google/uuid"
 )
 
-// AuthHandler handles authentication endpoints
 type AuthHandler struct {
 	authService *services.AuthService
 	cfg         *config.Config
 }
 
-// NewAuthHandler creates a new authentication handler
 func NewAuthHandler(authService *services.AuthService, cfg *config.Config) *AuthHandler {
 	return &AuthHandler{
 		authService: authService,
@@ -26,8 +24,6 @@ func NewAuthHandler(authService *services.AuthService, cfg *config.Config) *Auth
 	}
 }
 
-// Register handles user registration
-// Validates email domain restriction and uses Argon2id for password hashing
 func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	var req models.CreateUserRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -36,17 +32,14 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 		})
 	}
 
-	// Validate required fields
 	if req.Username == "" || req.Password == "" || req.Email == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Username, email, and password are required",
 		})
 	}
 
-	// For registration, we don't have a createdBy user, so use nil UUID
 	nilUUID := uuid.Nil
 
-	// Create user (email validation and password hashing handled by service)
 	user, err := h.authService.CreateUser(
 		c.Context(),
 		req.Username,
@@ -57,7 +50,6 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 		nilUUID,
 	)
 	if err != nil {
-		// Handle specific errors without leaking information
 		switch err {
 		case services.ErrEmailDomainNotAllowed:
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -74,7 +66,6 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 		}
 	}
 
-	// Log successful registration
 	username := user.Username
 	h.logAuditAction(c, security.ActionUserCreate, "user", &user.ID, &username, security.AuditDetails(map[string]interface{}{
 		"email": user.Email,
@@ -87,8 +78,6 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	})
 }
 
-// Login handles user authentication (Step 1 of 2FA)
-// Returns requires_2fa=true if 2FA is enabled, client must then call Verify2FA
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	var req models.LoginRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -97,22 +86,18 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		})
 	}
 
-	// Validate input
 	if req.Username == "" || req.Password == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Username and password are required",
 		})
 	}
 
-	// Authenticate user
 	result, err := h.authService.Login(c.Context(), req.Username, req.Password)
 	if err != nil {
-		// Log failed login attempt
 		h.logAuditAction(c, security.ActionLoginFailed, "auth", nil, &req.Username, security.AuditDetails(map[string]interface{}{
 			"reason": "Invalid credentials",
 		}))
 
-		// Don't reveal specific error to prevent user enumeration
 		if err == services.ErrInvalidCredentials || err == services.ErrUserNotActive {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"error": "Invalid credentials",
@@ -123,7 +108,6 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		})
 	}
 
-	// Check if 2FA is required
 	if result.Requires2FA {
 		return c.JSON(fiber.Map{
 			"requires_2fa":    true,
@@ -132,11 +116,9 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		})
 	}
 
-	// No 2FA - complete login
 	return h.completeLogin(c, result.User)
 }
 
-// Verify2FA handles 2FA OTP verification (Step 2 of 2FA)
 func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 	var req struct {
 		UserID string `json:"user_id"`
@@ -162,7 +144,6 @@ func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 		})
 	}
 
-	// Verify OTP
 	user, err := h.authService.Verify2FA(c.Context(), userID, req.Code)
 	if err != nil {
 		switch err {
@@ -192,7 +173,6 @@ func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 	return h.completeLogin(c, user)
 }
 
-// ResendOTP sends a new verification code
 func (h *AuthHandler) ResendOTP(c *fiber.Ctx) error {
 	var req struct {
 		UserID string `json:"user_id"`
@@ -223,9 +203,7 @@ func (h *AuthHandler) ResendOTP(c *fiber.Ctx) error {
 	})
 }
 
-// completeLogin finishes the login process and sets the secure cookie
 func (h *AuthHandler) completeLogin(c *fiber.Ctx, user *models.User) error {
-	// Generate JWT token with token version
 	token, err := middleware.GenerateToken(user, &h.cfg.JWT)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -233,7 +211,6 @@ func (h *AuthHandler) completeLogin(c *fiber.Ctx, user *models.User) error {
 		})
 	}
 
-	// Set HttpOnly cookie with maximum security settings
 	c.Cookie(&fiber.Cookie{
 		Name:     "auth_token",
 		Value:    token,
@@ -244,7 +221,6 @@ func (h *AuthHandler) completeLogin(c *fiber.Ctx, user *models.User) error {
 		Path:     "/",
 	})
 
-	// Log successful login
 	username := user.Username
 	h.logAuditAction(c, security.ActionLogin, "auth", &user.ID, &username, security.AuditDetails(map[string]interface{}{
 		"role": user.Role,
@@ -256,18 +232,14 @@ func (h *AuthHandler) completeLogin(c *fiber.Ctx, user *models.User) error {
 	})
 }
 
-// Logout handles user logout
 func (h *AuthHandler) Logout(c *fiber.Ctx) error {
-	// Get current user info for audit logging
 	userID := middleware.GetUserID(c)
 	username := middleware.GetUsername(c)
 
-	// Log logout if user was authenticated
 	if userID != uuid.Nil {
 		h.logAuditAction(c, security.ActionLogout, "auth", &userID, &username, "{}")
 	}
 
-	// Clear cookie with same settings
 	c.Cookie(&fiber.Cookie{
 		Name:     "auth_token",
 		Value:    "",
@@ -283,7 +255,6 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	})
 }
 
-// GetCurrentUser returns current authenticated user
 func (h *AuthHandler) GetCurrentUser(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 
@@ -297,7 +268,6 @@ func (h *AuthHandler) GetCurrentUser(c *fiber.Ctx) error {
 	return c.JSON(user)
 }
 
-// RevokeAllSessions invalidates all user sessions (Kill Switch)
 func (h *AuthHandler) RevokeAllSessions(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	username := middleware.GetUsername(c)
@@ -309,12 +279,10 @@ func (h *AuthHandler) RevokeAllSessions(c *fiber.Ctx) error {
 		})
 	}
 
-	// Log the Kill Switch activation
 	h.logAuditAction(c, security.ActionRevokeAllSessions, "auth", &userID, &username, security.AuditDetails(map[string]interface{}{
 		"action": "All sessions revoked",
 	}))
 
-	// Clear current session cookie
 	c.Cookie(&fiber.Cookie{
 		Name:     "auth_token",
 		Value:    "",
@@ -330,7 +298,6 @@ func (h *AuthHandler) RevokeAllSessions(c *fiber.Ctx) error {
 	})
 }
 
-// ChangePassword handles password change requests
 func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	username := middleware.GetUsername(c)
@@ -369,10 +336,8 @@ func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
 		})
 	}
 
-	// Log password change
 	h.logAuditAction(c, security.ActionPasswordChange, "auth", &userID, &username, "{}")
 
-	// Clear current session
 	c.Cookie(&fiber.Cookie{
 		Name:     "auth_token",
 		Value:    "",
@@ -388,7 +353,6 @@ func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
 	})
 }
 
-// Toggle2FA enables or disables 2FA for the current user
 func (h *AuthHandler) Toggle2FA(c *fiber.Ctx) error {
 	userID := middleware.GetUserID(c)
 	username := middleware.GetUsername(c)
@@ -410,7 +374,6 @@ func (h *AuthHandler) Toggle2FA(c *fiber.Ctx) error {
 		})
 	}
 
-	// Log 2FA toggle
 	h.logAuditAction(c, security.ActionDataModified, "user", &userID, &username, security.AuditDetails(map[string]interface{}{
 		"two_factor_enabled": req.Enabled,
 	}))
@@ -426,7 +389,6 @@ func (h *AuthHandler) Toggle2FA(c *fiber.Ctx) error {
 	})
 }
 
-// logAuditAction is a helper to create audit log entries
 func (h *AuthHandler) logAuditAction(c *fiber.Ctx, action security.AuditAction, resourceType string, resourceID *uuid.UUID, username *string, details string) {
 	entry := &security.AuditLog{
 		Action:       action,
@@ -439,12 +401,10 @@ func (h *AuthHandler) logAuditAction(c *fiber.Ctx, action security.AuditAction, 
 		UserAgent:    middleware.GetUserAgent(c),
 	}
 
-	// Set user ID if available
 	if userID := middleware.GetUserID(c); userID != uuid.Nil {
 		entry.UserID = &userID
 	}
 
-	// Log asynchronously to not block the request
 	go func() {
 		_ = h.authService.GetAuditService().LogAction(c.Context(), entry)
 	}()

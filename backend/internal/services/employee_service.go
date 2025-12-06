@@ -17,7 +17,6 @@ func NewEmployeeService(db *database.DB) *EmployeeService {
 	return &EmployeeService{db: db}
 }
 
-// ListEmployees returns all employees
 func (s *EmployeeService) ListEmployees(ctx context.Context) ([]models.Employee, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, employee_number, full_name, full_name_ar, position, position_ar,
@@ -47,7 +46,6 @@ func (s *EmployeeService) ListEmployees(ctx context.Context) ([]models.Employee,
 	return employees, nil
 }
 
-// GetEmployeeByID retrieves an employee by ID
 func (s *EmployeeService) GetEmployeeByID(ctx context.Context, id uuid.UUID) (*models.Employee, error) {
 	var e models.Employee
 	err := s.db.QueryRowContext(ctx, `
@@ -68,9 +66,7 @@ func (s *EmployeeService) GetEmployeeByID(ctx context.Context, id uuid.UUID) (*m
 	return &e, nil
 }
 
-// CreateEmployee creates a new employee
 func (s *EmployeeService) CreateEmployee(ctx context.Context, req *models.CreateEmployeeRequest, createdBy uuid.UUID) (*models.Employee, error) {
-	// Check if employee number exists
 	var exists bool
 	err := s.db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM employees WHERE employee_number = $1)", req.EmployeeNumber).Scan(&exists)
 	if err != nil {
@@ -101,7 +97,6 @@ func (s *EmployeeService) CreateEmployee(ctx context.Context, req *models.Create
 	return &e, nil
 }
 
-// UpdateEmployee updates an employee
 func (s *EmployeeService) UpdateEmployee(ctx context.Context, id uuid.UUID, req *models.UpdateEmployeeRequest) (*models.Employee, error) {
 	var e models.Employee
 	err := s.db.QueryRowContext(ctx, `
@@ -135,7 +130,6 @@ func (s *EmployeeService) UpdateEmployee(ctx context.Context, id uuid.UUID, req 
 	return &e, nil
 }
 
-// DeleteEmployee deletes an employee
 func (s *EmployeeService) DeleteEmployee(ctx context.Context, id uuid.UUID) error {
 	result, err := s.db.ExecContext(ctx, `
 		DELETE FROM employees WHERE id = $1

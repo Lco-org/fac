@@ -19,7 +19,6 @@ func NewUserHandler(userService *services.UserService) *UserHandler {
 	}
 }
 
-// ListUsers returns all users (Admin only)
 func (h *UserHandler) ListUsers(c *fiber.Ctx) error {
 	users, err := h.userService.ListUsers(c.Context())
 	if err != nil {
@@ -31,7 +30,6 @@ func (h *UserHandler) ListUsers(c *fiber.Ctx) error {
 	return c.JSON(users)
 }
 
-// GetUser returns a single user by ID
 func (h *UserHandler) GetUser(c *fiber.Ctx) error {
 	idParam := c.Params("id")
 	id, err := uuid.Parse(idParam)
@@ -51,7 +49,6 @@ func (h *UserHandler) GetUser(c *fiber.Ctx) error {
 	return c.JSON(user)
 }
 
-// CreateUser creates a new user (Admin only)
 func (h *UserHandler) CreateUser(c *fiber.Ctx) error {
 	var req models.CreateUserRequest
 	if err := c.BodyParser(&req); err != nil {
@@ -60,7 +57,6 @@ func (h *UserHandler) CreateUser(c *fiber.Ctx) error {
 		})
 	}
 
-	// Validate required fields
 	if req.Username == "" || req.Email == "" || req.Password == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Username, email, and password are required",
@@ -79,7 +75,6 @@ func (h *UserHandler) CreateUser(c *fiber.Ctx) error {
 	return c.Status(fiber.StatusCreated).JSON(user)
 }
 
-// UpdateUser updates user information (Admin only)
 func (h *UserHandler) UpdateUser(c *fiber.Ctx) error {
 	idParam := c.Params("id")
 	id, err := uuid.Parse(idParam)
@@ -106,7 +101,6 @@ func (h *UserHandler) UpdateUser(c *fiber.Ctx) error {
 	return c.JSON(user)
 }
 
-// DeleteUser deletes/deactivates a user (Admin only)
 func (h *UserHandler) DeleteUser(c *fiber.Ctx) error {
 	idParam := c.Params("id")
 	id, err := uuid.Parse(idParam)
@@ -127,7 +121,6 @@ func (h *UserHandler) DeleteUser(c *fiber.Ctx) error {
 	})
 }
 
-// UpdateUserRole updates user role (Admin only)
 func (h *UserHandler) UpdateUserRole(c *fiber.Ctx) error {
 	idParam := c.Params("id")
 	id, err := uuid.Parse(idParam)

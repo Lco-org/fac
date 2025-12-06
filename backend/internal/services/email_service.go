@@ -13,7 +13,6 @@ import (
 	"time"
 )
 
-// EmailConfig holds SMTP configuration
 type EmailConfig struct {
 	SMTPHost    string
 	SMTPPort    string
@@ -22,112 +21,87 @@ type EmailConfig struct {
 	FromAddress string
 	FromName    string
 	UseTLS      bool
-	SkipVerify  bool // For development only - NEVER use in production
+	SkipVerify  bool
 }
 
-// EmailService handles sending emails securely
 type EmailService struct {
 	config *EmailConfig
-	mock   bool // If true, just logs emails instead of sending
+	mock   bool
 }
 
-// Security constants
 const (
-	// Maximum email size to prevent DoS
-	MaxEmailSize = 10 * 1024 * 1024 // 10MB
-
-	// Connection timeout
-	SMTPDialTimeout = 30 * time.Second
-
-	// Rate limiting - max emails per minute
+	MaxEmailSize       = 10 * 1024 * 1024
+	SMTPDialTimeout    = 30 * time.Second
 	MaxEmailsPerMinute = 10
-
-	// Minimum TLS version
-	MinTLSVersion = tls.VersionTLS12
+	MinTLSVersion      = tls.VersionTLS12
 )
 
-// Email validation regex (RFC 5322 simplified)
 var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
 
-// NewEmailService creates a new email service
 func NewEmailService(config *EmailConfig) *EmailService {
 	if config == nil || config.SMTPHost == "" {
-		log.Println("⚠️  Email service not configured - running in mock mode (emails will be logged)")
+		log.Println("Email service running in mock mode")
 		return &EmailService{config: nil, mock: true}
 	}
 
-	// Validate configuration
 	if !emailRegex.MatchString(config.FromAddress) {
-		log.Printf("⚠️  Invalid FROM email address: %s - using mock mode", config.FromAddress)
+		log.Printf("Invalid FROM address: %s - defaulting to mock mode", config.FromAddress)
 		return &EmailService{config: nil, mock: true}
 	}
 
-	// Security warning for production
 	if config.SkipVerify {
-		log.Println("⚠️  WARNING: TLS certificate verification is DISABLED - this is insecure!")
+		log.Println("SECURITY WARNING: TLS certificate verification is DISABLED")
 	}
 
-	log.Printf("📧 Email service configured: SMTP=%s:%s, TLS=%v", config.SMTPHost, config.SMTPPort, config.UseTLS)
 	return &EmailService{config: config, mock: false}
 }
 
-// NewMockEmailService creates a mock email service for testing
 func NewMockEmailService() *EmailService {
 	return &EmailService{mock: true}
 }
 
-// validateEmail validates an email address for security
 func validateEmail(email string) error {
 	if email == "" {
-		return fmt.Errorf("email address is empty")
+		return fmt.Errorf("empty email")
 	}
 	if len(email) > 254 {
-		return fmt.Errorf("email address too long")
+		return fmt.Errorf("email too long")
 	}
 	if !emailRegex.MatchString(email) {
-		return fmt.Errorf("invalid email format")
+		return fmt.Errorf("invalid format")
 	}
-	// Prevent header injection attacks
 	if strings.ContainsAny(email, "\r\n") {
-		return fmt.Errorf("email contains invalid characters")
+		return fmt.Errorf("invalid characters")
 	}
 	return nil
 }
 
-// sanitizeHeader sanitizes email header values to prevent header injection
 func sanitizeHeader(value string) string {
-	// Remove any CR/LF characters to prevent header injection
 	value = strings.ReplaceAll(value, "\r", "")
 	value = strings.ReplaceAll(value, "\n", "")
-	// Limit length
 	if len(value) > 998 {
 		value = value[:998]
 	}
 	return value
 }
 
-// SendOTPEmail sends a verification code email securely
 func (s *EmailService) SendOTPEmail(ctx context.Context, toEmail, toName, code string) error {
-	// Validate inputs
 	if err := validateEmail(toEmail); err != nil {
-		return fmt.Errorf("invalid recipient email: %w", err)
+		return err
 	}
 
-	// Sanitize name to prevent injection
 	toName = sanitizeHeader(toName)
 
-	// Validate OTP code format (should be 6 digits only)
 	if len(code) != 6 {
-		return fmt.Errorf("invalid OTP code length")
+		return fmt.Errorf("invalid OTP length")
 	}
 	for _, c := range code {
 		if c < '0' || c > '9' {
-			return fmt.Errorf("invalid OTP code format")
+			return fmt.Errorf("invalid OTP format")
 		}
 	}
 
 	subject := "رمز التحقق - CSO ERP"
-
 	body := fmt.Sprintf(`<!DOCTYPE html>
 <html dir="rtl" lang="ar">
 <head>
@@ -174,12 +148,10 @@ func (s *EmailService) SendOTPEmail(ctx context.Context, toEmail, toName, code s
 	return s.SendEmail(ctx, toEmail, subject, body, true)
 }
 
-// LoginAuth implements the LOGIN authentication mechanism
 type loginAuth struct {
 	username, password string
 }
 
-// LoginAuth returns an Auth that implements the LOGIN authentication mechanism.
 func LoginAuth(username, password string) smtp.Auth {
 	return &loginAuth{username, password}
 }
@@ -202,91 +174,64 @@ func (a *loginAuth) Next(fromServer []byte, more bool) ([]byte, error) {
 	return nil, nil
 }
 
-// SendEmail sends an email securely with all protections
 func (s *EmailService) SendEmail(ctx context.Context, to, subject, body string, isHTML bool) error {
-	// Check context for cancellation
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	default:
 	}
 
-	// Validate recipient
 	if err := validateEmail(to); err != nil {
-		return fmt.Errorf("invalid recipient: %w", err)
+		return err
 	}
 
-	// Check body size
 	if len(body) > MaxEmailSize {
 		return fmt.Errorf("email body too large")
 	}
 
-	// Mock mode - just log the email
 	if s.mock {
-		log.Printf(`
-╔══════════════════════════════════════════════════════════════════╗
-║                    📧 EMAIL (MOCK MODE)                          ║
-╠══════════════════════════════════════════════════════════════════╣
-║ TO:      %s
-║ SUBJECT: %s
-╠══════════════════════════════════════════════════════════════════╣
-║ BODY: [%d bytes]
-╚══════════════════════════════════════════════════════════════════╝
-`, to, subject, len(body))
+		log.Printf("[MOCK EMAIL] To: %s | Subject: %s", to, subject)
 		return nil
 	}
 
-	// Build secure email message
 	contentType := "text/plain; charset=UTF-8"
 	if isHTML {
 		contentType = "text/html; charset=UTF-8"
 	}
 
-	// RFC 2047 Encode Subject (Base64) for non-ASCII characters
-	// Format: =?charset?encoding?encoded_text?=
 	encodedSubject := fmt.Sprintf("=?UTF-8?B?%s?=", base64.StdEncoding.EncodeToString([]byte(subject)))
 
-	// Build headers securely
 	var message strings.Builder
 	message.WriteString(fmt.Sprintf("From: %s <%s>\r\n", sanitizeHeader(s.config.FromName), s.config.FromAddress))
 	message.WriteString(fmt.Sprintf("To: %s\r\n", to))
 	message.WriteString(fmt.Sprintf("Subject: %s\r\n", encodedSubject))
 	message.WriteString("MIME-Version: 1.0\r\n")
 	message.WriteString(fmt.Sprintf("Content-Type: %s\r\n", contentType))
-	message.WriteString("Content-Transfer-Encoding: 8bit\r\n") // Explicitly set encoding
+	message.WriteString("Content-Transfer-Encoding: 8bit\r\n")
 	message.WriteString(fmt.Sprintf("Date: %s\r\n", time.Now().Format(time.RFC1123Z)))
 	message.WriteString(fmt.Sprintf("Message-ID: <%d.%s@%s>\r\n", time.Now().UnixNano(), "cso-erp", "lco.org.ly"))
-
-	// Security headers
 	message.WriteString("\r\n")
 	message.WriteString(body)
 
-	// Connect to SMTP server with timeout
 	addr := fmt.Sprintf("%s:%s", s.config.SMTPHost, s.config.SMTPPort)
 
 	dialer := &net.Dialer{Timeout: SMTPDialTimeout}
 	conn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
-		log.Printf("❌ SMTP connection error: %v", err)
-		return fmt.Errorf("failed to connect to SMTP server: %w", err)
+		return err
 	}
 
 	client, err := smtp.NewClient(conn, s.config.SMTPHost)
 	if err != nil {
 		conn.Close()
-		log.Printf("❌ SMTP client error: %v", err)
-		return fmt.Errorf("failed to create SMTP client: %w", err)
+		return err
 	}
 	defer client.Close()
 
-	// Say hello with proper domain (not localhost)
-	// Using lco.org.ly as it matches the sender domain
 	if err = client.Hello("lco.org.ly"); err != nil {
-		log.Printf("❌ SMTP Hello error: %v", err)
 		return err
 	}
 
-	// Start TLS with secure configuration
 	if s.config.UseTLS {
 		tlsConfig := &tls.Config{
 			ServerName:         s.config.SMTPHost,
@@ -300,41 +245,30 @@ func (s *EmailService) SendEmail(ctx context.Context, to, subject, body string, 
 			},
 		}
 		if err = client.StartTLS(tlsConfig); err != nil {
-			log.Printf("❌ SMTP StartTLS error: %v", err)
-			return fmt.Errorf("STARTTLS failed: %w", err)
+			return err
 		}
-		log.Println("🔒 TLS connection established")
 	}
 
-	// Authenticate securely
 	if s.config.Username != "" {
-		// Try LOGIN auth first for compatibility
 		auth := LoginAuth(s.config.Username, s.config.Password)
 		if err = client.Auth(auth); err != nil {
-			log.Printf("⚠️ SMTP LOGIN Auth failed: %v. Retrying with PLAIN...", err)
-			// Fallback to PLAIN if LOGIN fails
+			log.Printf("LOGIN failed, retrying PLAIN: %v", err)
 			auth = smtp.PlainAuth("", s.config.Username, s.config.Password, s.config.SMTPHost)
 			if err = client.Auth(auth); err != nil {
-				log.Printf("❌ SMTP PLAIN Auth error: %v", err)
-				return fmt.Errorf("SMTP authentication failed: %w", err)
+				return err
 			}
 		}
 	}
 
-	// Set sender and recipient
 	if err = client.Mail(s.config.FromAddress); err != nil {
-		log.Printf("❌ SMTP Mail error: %v", err)
 		return err
 	}
 	if err = client.Rcpt(to); err != nil {
-		log.Printf("❌ SMTP Rcpt error: %v", err)
 		return err
 	}
 
-	// Send message body
 	w, err := client.Data()
 	if err != nil {
-		log.Printf("❌ SMTP Data error: %v", err)
 		return err
 	}
 	_, err = w.Write([]byte(message.String()))
@@ -346,6 +280,6 @@ func (s *EmailService) SendEmail(ctx context.Context, to, subject, body string, 
 		return err
 	}
 
-	log.Printf("✅ Email sent securely to %s", to)
+	log.Printf("Email sent to %s", to)
 	return client.Quit()
 }

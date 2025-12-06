@@ -17,7 +17,6 @@ func NewDashboardHandler(dashboardService *services.DashboardService) *Dashboard
 	}
 }
 
-// GetWidgetConfigs returns all dashboard widget configurations (admin only)
 func (h *DashboardHandler) GetWidgetConfigs(c *fiber.Ctx) error {
 	widgets, err := h.dashboardService.GetWidgetConfigs(c.Context())
 	if err != nil {
@@ -29,7 +28,6 @@ func (h *DashboardHandler) GetWidgetConfigs(c *fiber.Ctx) error {
 	return c.JSON(widgets)
 }
 
-// UpdateWidgetConfig updates a widget configuration (admin only)
 func (h *DashboardHandler) UpdateWidgetConfig(c *fiber.Ctx) error {
 	widgetID := c.Params("id")
 
@@ -52,7 +50,6 @@ func (h *DashboardHandler) UpdateWidgetConfig(c *fiber.Ctx) error {
 	})
 }
 
-// BulkUpdateWidgetOrder updates display order for multiple widgets (admin only)
 func (h *DashboardHandler) BulkUpdateWidgetOrder(c *fiber.Ctx) error {
 	var req []models.WidgetOrderUpdate
 	if err := c.BodyParser(&req); err != nil {
