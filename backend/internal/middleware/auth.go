@@ -20,10 +20,6 @@ type JWTClaims struct {
 	jwt.RegisteredClaims
 }
 
-type TokenValidator interface {
-	ValidateTokenVersion(userID uuid.UUID, tokenVersion int) (bool, error)
-}
-
 func AuthMiddleware(cfg *config.JWTConfig) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		tokenString := c.Cookies("auth_token")

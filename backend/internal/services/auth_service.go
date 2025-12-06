@@ -289,22 +289,6 @@ func (s *AuthService) Toggle2FA(ctx context.Context, userID uuid.UUID, enabled b
 	return err
 }
 
-func (s *AuthService) ValidateTokenVersion(ctx context.Context, userID uuid.UUID, tokenVersion int) (bool, error) {
-	var currentVersion int
-	err := s.db.QueryRowContext(ctx, `
-		SELECT token_version FROM users WHERE id = $1 AND is_active = true
-	`, userID).Scan(&currentVersion)
-
-	if err == sql.ErrNoRows {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-
-	return currentVersion == tokenVersion, nil
-}
-
 func (s *AuthService) GetAuditService() *security.AuditService {
 	return s.auditService
 }
