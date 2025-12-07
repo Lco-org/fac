@@ -5,6 +5,7 @@ import (
 	"cso-erp/internal/database"
 	"cso-erp/internal/models"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 )
@@ -19,8 +20,8 @@ func NewMemberService(db *database.DB) *MemberService {
 
 func (s *MemberService) ListMembers(ctx context.Context) ([]models.Member, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, membership_number, full_name, full_name_ar, member_type, phone, email,
-		       address, address_ar, join_date, status, is_active, created_at
+		SELECT id, membership_number, full_name, full_name_ar, COALESCE(member_type, ''), phone, email,
+		       address, address_ar, join_date, COALESCE(status, 'active'), is_active, created_at
 		FROM members
 		ORDER BY created_at DESC
 	`)
@@ -48,8 +49,8 @@ func (s *MemberService) ListMembers(ctx context.Context) ([]models.Member, error
 func (s *MemberService) GetMemberByID(ctx context.Context, id uuid.UUID) (*models.Member, error) {
 	var m models.Member
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, membership_number, full_name, full_name_ar, member_type, phone, email,
-		       address, address_ar, join_date, status, is_active, created_at
+		SELECT id, membership_number, full_name, full_name_ar, COALESCE(member_type, ''), phone, email,
+		       address, address_ar, join_date, COALESCE(status, 'active'), is_active, created_at
 		FROM members
 		WHERE id = $1
 	`, id).Scan(
@@ -74,6 +75,12 @@ func (s *MemberService) CreateMember(ctx context.Context, req *models.CreateMemb
 		return nil, ErrMembershipNumberExists
 	}
 
+	// Set default join date if not provided
+	joinDate := time.Now()
+	if req.JoinDate != nil {
+		joinDate = *req.JoinDate
+	}
+
 	var m models.Member
 	err = s.db.QueryRowContext(ctx, `
 		INSERT INTO members (membership_number, full_name, full_name_ar, member_type, phone, email,
@@ -82,7 +89,7 @@ func (s *MemberService) CreateMember(ctx context.Context, req *models.CreateMemb
 		RETURNING id, membership_number, full_name, full_name_ar, member_type, phone, email,
 		          address, address_ar, join_date, status, is_active, created_at
 	`, req.MembershipNumber, req.FullName, req.FullNameAr, req.MemberType, req.Phone, req.Email,
-		req.Address, req.AddressAr, req.JoinDate, createdBy).Scan(
+		req.Address, req.AddressAr, joinDate, createdBy).Scan(
 		&m.ID, &m.MembershipNumber, &m.FullName, &m.FullNameAr, &m.MemberType, &m.Phone, &m.Email,
 		&m.Address, &m.AddressAr, &m.JoinDate, &m.Status, &m.IsActive, &m.CreatedAt,
 	)

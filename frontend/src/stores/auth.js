@@ -16,6 +16,16 @@ export const useAuthStore = defineStore('auth', () => {
         return userRole.value === role
     }
 
+    // User permissions
+    const permissions = computed(() => user.value?.permissions || [])
+
+    // Check if user has specific permission
+    const hasPermission = (perm) => {
+        // Admins automatically have all permissions (optional, but good practice)
+        if (userRole.value === 'admin') return true
+        return permissions.value.includes(perm)
+    }
+
     // Check if user can write (Admin or Finance)
     const canWrite = computed(() => {
         return userRole.value === 'admin' || userRole.value === 'finance'
@@ -188,9 +198,11 @@ export const useAuthStore = defineStore('auth', () => {
         user,
         isAuthenticated,
         userRole,
+        permissions,
         requires2FA,
         pendingUserId,
         hasRole,
+        hasPermission,
         canWrite,
         canDelete,
         canRead,

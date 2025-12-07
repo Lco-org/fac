@@ -129,3 +129,36 @@ func (h *ReportHandler) GetProjectSummary(c *fiber.Ctx) error {
 
 	return c.JSON(projects)
 }
+
+// GetInvoices returns a list of income transactions (invoices)
+func (h *ReportHandler) GetInvoices(c *fiber.Ctx) error {
+	// Parse optional date filters
+	var startDate, endDate *time.Time
+	if start := c.Query("start_date"); start != "" {
+		t, err := time.Parse("2006-01-02", start)
+		if err == nil {
+			startDate = &t
+		}
+	}
+	if end := c.Query("end_date"); end != "" {
+		t, err := time.Parse("2006-01-02", end)
+		if err == nil {
+			// Set to end of day
+			t = t.Add(24 * time.Hour).Add(-1 * time.Nanosecond)
+			endDate = &t
+		}
+	}
+
+	projectID := c.Query("project_id")
+	containerID := c.Query("container_id")
+	transactionNumber := c.Query("transaction_number")
+
+	invoices, err := h.reportService.GetInvoices(c.Context(), startDate, endDate, projectID, containerID, transactionNumber)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Failed to fetch invoices",
+		})
+	}
+
+	return c.JSON(invoices)
+}

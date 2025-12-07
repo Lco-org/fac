@@ -126,12 +126,12 @@ func main() {
 	dashboardWidgets.Put("/:id", dashboardHandler.UpdateWidgetConfig)
 	dashboardWidgets.Post("/bulk-order", dashboardHandler.BulkUpdateWidgetOrder)
 
-	containers := protected.Group("/containers", middleware.RequireRole(models.RoleAdmin))
-	containers.Get("", containerHandler.ListContainers)
-	containers.Post("", containerHandler.CreateContainer)
-	containers.Get("/:id", containerHandler.GetContainer)
-	containers.Put("/:id", containerHandler.UpdateContainer)
-	containers.Delete("/:id", containerHandler.DeleteContainer)
+	containers := protected.Group("/containers")
+	containers.Get("", middleware.RequireFinanceOrAdmin(), containerHandler.ListContainers)
+	containers.Post("", middleware.RequireRole(models.RoleAdmin), containerHandler.CreateContainer)
+	containers.Get("/:id", middleware.RequireRole(models.RoleAdmin), containerHandler.GetContainer)
+	containers.Put("/:id", middleware.RequireRole(models.RoleAdmin), containerHandler.UpdateContainer)
+	containers.Delete("/:id", middleware.RequireRole(models.RoleAdmin), containerHandler.DeleteContainer)
 
 	transactions := protected.Group("/transactions")
 	transactions.Post("/", middleware.RequireFinanceOrAdmin(), transactionHandler.CreateTransaction)
@@ -150,6 +150,7 @@ func main() {
 	reports.Get("/projects/:id/statement", middleware.RequireAnyAuthenticated(), reportHandler.GetProjectStatement)
 	reports.Get("/daily-position", middleware.RequireAnyAuthenticated(), reportHandler.GetDailyPosition)
 	reports.Get("/project-summary", middleware.RequireAnyAuthenticated(), reportHandler.GetProjectSummary)
+	reports.Get("/invoices", middleware.RequireAnyAuthenticated(), reportHandler.GetInvoices)
 
 	projects := protected.Group("/projects", middleware.RequireRole(models.RoleAdmin))
 	projects.Get("", projectHandler.ListProjects)

@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
 
 type UserService struct {
@@ -30,7 +31,7 @@ var (
 
 func (s *UserService) ListUsers(ctx context.Context) ([]models.User, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, username, email, full_name, full_name_ar, role, is_active, last_login, created_at
+		SELECT id, username, email, full_name, full_name_ar, role, permissions, is_active, last_login, created_at
 		FROM users
 		ORDER BY created_at DESC
 	`)
@@ -49,6 +50,7 @@ func (s *UserService) ListUsers(ctx context.Context) ([]models.User, error) {
 			&user.FullName,
 			&user.FullNameAr,
 			&user.Role,
+			pq.Array(&user.Permissions),
 			&user.IsActive,
 			&user.LastLogin,
 			&user.CreatedAt,
@@ -69,7 +71,7 @@ func (s *UserService) ListUsers(ctx context.Context) ([]models.User, error) {
 func (s *UserService) GetUserByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
 	var user models.User
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, username, email, full_name, full_name_ar, role, is_active, last_login, created_at
+		SELECT id, username, email, full_name, full_name_ar, role, permissions, is_active, last_login, created_at
 		FROM users
 		WHERE id = $1
 	`, id).Scan(
@@ -79,6 +81,7 @@ func (s *UserService) GetUserByID(ctx context.Context, id uuid.UUID) (*models.Us
 		&user.FullName,
 		&user.FullNameAr,
 		&user.Role,
+		pq.Array(&user.Permissions),
 		&user.IsActive,
 		&user.LastLogin,
 		&user.CreatedAt,
@@ -128,16 +131,17 @@ func (s *UserService) CreateUser(ctx context.Context, req *models.CreateUserRequ
 
 	var user models.User
 	err = s.db.QueryRowContext(ctx, `
-		INSERT INTO users (username, email, password_hash, full_name, full_name_ar, role, created_by)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		RETURNING id, username, email, full_name, full_name_ar, role, is_active, created_at
-	`, req.Username, email, hashedPassword, req.FullName, req.FullNameAr, req.Role, createdBy).Scan(
+		INSERT INTO users (username, email, password_hash, full_name, full_name_ar, role, permissions, created_by)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id, username, email, full_name, full_name_ar, role, permissions, is_active, created_at
+	`, req.Username, email, hashedPassword, req.FullName, req.FullNameAr, req.Role, pq.Array(req.Permissions), createdBy).Scan(
 		&user.ID,
 		&user.Username,
 		&user.Email,
 		&user.FullName,
 		&user.FullNameAr,
 		&user.Role,
+		pq.Array(&user.Permissions),
 		&user.IsActive,
 		&user.CreatedAt,
 	)
@@ -181,9 +185,14 @@ func (s *UserService) UpdateUser(ctx context.Context, id uuid.UUID, req *models.
 		args = append(args, *req.IsActive)
 		argCount++
 	}
+	if req.Permissions != nil {
+		query += fmt.Sprintf("permissions = $%d, ", argCount)
+		args = append(args, pq.Array(req.Permissions))
+		argCount++
+	}
 
 	query = query[:len(query)-2]
-	query += fmt.Sprintf(" WHERE id = $%d RETURNING id, username, email, full_name, full_name_ar, role, is_active, created_at", argCount)
+	query += fmt.Sprintf(" WHERE id = $%d RETURNING id, username, email, full_name, full_name_ar, role, permissions, is_active, created_at", argCount)
 	args = append(args, id)
 
 	var user models.User
@@ -194,6 +203,7 @@ func (s *UserService) UpdateUser(ctx context.Context, id uuid.UUID, req *models.
 		&user.FullName,
 		&user.FullNameAr,
 		&user.Role,
+		pq.Array(&user.Permissions),
 		&user.IsActive,
 		&user.CreatedAt,
 	)
@@ -227,7 +237,7 @@ func (s *UserService) UpdateUserRole(ctx context.Context, id uuid.UUID, role mod
 	err := s.db.QueryRowContext(ctx, `
 		UPDATE users SET role = $1
 		WHERE id = $2
-		RETURNING id, username, email, full_name, full_name_ar, role, is_active, created_at
+		RETURNING id, username, email, full_name, full_name_ar, role, permissions, is_active, created_at
 	`, role, id).Scan(
 		&user.ID,
 		&user.Username,
@@ -235,6 +245,7 @@ func (s *UserService) UpdateUserRole(ctx context.Context, id uuid.UUID, role mod
 		&user.FullName,
 		&user.FullNameAr,
 		&user.Role,
+		pq.Array(&user.Permissions),
 		&user.IsActive,
 		&user.CreatedAt,
 	)

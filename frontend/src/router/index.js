@@ -8,7 +8,6 @@ const routes = [
         component: () => import('@/views/LoginView.vue'),
         meta: { requiresAuth: false },
     },
-
     {
         path: '/',
         component: () => import('@/layouts/DashboardLayout.vue'),
@@ -56,12 +55,6 @@ const routes = [
                 meta: { requiresRole: ['admin', 'finance'] },
             },
             {
-                path: 'receipt/:id',
-                name: 'Receipt',
-                component: () => import('@/views/ReceiptView.vue'),
-                meta: { requiresAuth: true },
-            },
-            {
                 path: 'admin/users',
                 name: 'Users',
                 component: () => import('@/views/admin/UsersView.vue'),
@@ -103,13 +96,23 @@ const routes = [
                 component: () => import('@/views/admin/AccountSecurityView.vue'),
                 meta: { requiresAuth: true },
             },
-
-
-
             {
                 path: 'reports/detailed-statement',
                 name: 'DetailedStatement',
                 component: () => import('@/views/reports/DetailedStatementView.vue'),
+                meta: { title: 'كشف حساب تفصيلي' }
+            },
+            {
+                path: 'reports/daily-position',
+                name: 'DailyPosition',
+                component: () => import('@/views/reports/DailyPositionView.vue'),
+                meta: { title: 'الموقف اليومي' }
+            },
+            {
+                path: 'reports/invoices',
+                name: 'InvoicesReport',
+                component: () => import('@/views/reports/InvoicesReportView.vue'),
+                meta: { title: 'تقرير الفواتير', requiresPermission: 'view_invoices' }
             },
         ],
     },
@@ -130,7 +133,7 @@ const router = createRouter({
 router.beforeEach(async (to, from, next) => {
     const authStore = useAuthStore()
 
-    if (to.meta.requiresAuth) {
+    if (to.meta.requiresAuth || to.path.startsWith('/reports/')) { // Reports typically need auth
         if (!authStore.isAuthenticated) {
             // Try to fetch current user
             const success = await authStore.fetchCurrentUser()
@@ -138,13 +141,20 @@ router.beforeEach(async (to, from, next) => {
                 return next('/login')
             }
         }
+    }
 
-        // Check role-based access
-        if (to.meta.requiresRole) {
-            const hasRequiredRole = to.meta.requiresRole.includes(authStore.userRole)
-            if (!hasRequiredRole) {
-                return next('/')
-            }
+    // Role checks
+    if (to.meta.requiresRole) {
+        const hasRequiredRole = to.meta.requiresRole.includes(authStore.userRole)
+        if (!hasRequiredRole) {
+            return next('/')
+        }
+    }
+
+    // Permission checks
+    if (to.meta.requiresPermission) {
+        if (!authStore.hasPermission(to.meta.requiresPermission)) {
+            return next('/')
         }
     }
 

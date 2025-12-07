@@ -62,6 +62,8 @@ const menuItems = computed(() => {
       children: [
 
         { title: 'الجرد المفصل', path: '/reports/detailed-statement' },
+        { title: 'الموقف اليومي', path: '/reports/daily-position' },
+        ...(authStore.hasPermission('view_invoices') ? [{ title: 'تقرير الفواتير', path: '/reports/invoices' }] : []),
       ],
     },
   ]

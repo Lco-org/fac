@@ -190,7 +190,11 @@
               <tbody class="bg-white divide-y divide-gray-200 print:divide-gray-400">
                 <tr v-for="(transaction, index) in statement.transactions" :key="transaction.id" :class="index % 2 === 0 ? 'bg-white' : 'bg-gray-50'">
                   <td class="px-4 py-3 whitespace-nowrap text-sm font-medium">{{ formatDate(transaction.transaction_date) }}</td>
-                  <td class="px-4 py-3 whitespace-nowrap text-sm font-mono text-primary-600 font-bold">{{ transaction.transaction_number }}</td>
+                  <td class="px-4 py-3 whitespace-nowrap text-sm font-mono text-primary-600 font-bold">
+                    <a :href="`/receipt/${transaction.id}`" target="_blank" class="hover:underline hover:text-primary-800">
+                        {{ transaction.transaction_number }}
+                    </a>
+                  </td>
                   <td class="px-4 py-3 text-sm">
                     <div class="font-semibold">{{ getTransactionTypeName(transaction.type) }}</div>
                     <div class="text-xs text-gray-600">{{ transaction.description }}</div>

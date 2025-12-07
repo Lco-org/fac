@@ -22,6 +22,7 @@ type User struct {
 	FullName         string     `json:"full_name"`
 	FullNameAr       *string    `json:"full_name_ar,omitempty"`
 	Role             UserRole   `json:"role"`
+	Permissions      []string   `json:"permissions"`
 	TokenVersion     int        `json:"-"`
 	TwoFactorEnabled bool       `json:"two_factor_enabled"`
 	IsActive         bool       `json:"is_active"`
@@ -150,19 +151,21 @@ type LoginResponse struct {
 }
 
 type CreateUserRequest struct {
-	Username   string   `json:"username"`
-	Email      string   `json:"email"`
-	Password   string   `json:"password"`
-	FullName   string   `json:"full_name"`
-	FullNameAr *string  `json:"full_name_ar,omitempty"`
-	Role       UserRole `json:"role"`
+	Username    string   `json:"username"`
+	Email       string   `json:"email"`
+	Password    string   `json:"password"`
+	FullName    string   `json:"full_name"`
+	FullNameAr  *string  `json:"full_name_ar,omitempty"`
+	Role        UserRole `json:"role"`
+	Permissions []string `json:"permissions"`
 }
 
 type UpdateUserRequest struct {
-	Email      *string `json:"email,omitempty"`
-	FullName   *string `json:"full_name,omitempty"`
-	FullNameAr *string `json:"full_name_ar,omitempty"`
-	IsActive   *bool   `json:"is_active,omitempty"`
+	Email       *string  `json:"email,omitempty"`
+	FullName    *string  `json:"full_name,omitempty"`
+	FullNameAr  *string  `json:"full_name_ar,omitempty"`
+	IsActive    *bool    `json:"is_active,omitempty"`
+	Permissions []string `json:"permissions,omitempty"`
 }
 
 type CreateTransactionRequest struct {

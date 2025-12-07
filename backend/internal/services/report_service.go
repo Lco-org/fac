@@ -691,3 +691,72 @@ func (s *ReportService) GetProjectSummary(ctx context.Context) ([]models.Project
 
 	return projects, nil
 }
+
+func (s *ReportService) GetInvoices(ctx context.Context, startDate, endDate *time.Time, projectID, containerID, transactionNumber string) ([]models.ProjectTransactionDetail, error) {
+	query := `
+		SELECT t.id, t.transaction_number, t.type, t.amount, t.currency,
+		       t.description, t.description_ar, t.payee_payer,
+		       COALESCE(p.code, ''), COALESCE(p.name, ''),
+		       fc.name, fc.type, fc.currency, t.transaction_date, t.created_at
+		FROM transactions t
+		LEFT JOIN projects p ON t.project_id = p.id
+		JOIN financial_containers fc ON t.container_id = fc.id
+		WHERE t.status = 'completed'
+	`
+	args := []interface{}{}
+	argCount := 1
+
+	if startDate != nil {
+		query += ` AND t.transaction_date >= $` + string(rune(argCount+'0'))
+		args = append(args, startDate)
+		argCount++
+	}
+	if endDate != nil {
+		query += ` AND t.transaction_date <= $` + string(rune(argCount+'0'))
+		args = append(args, endDate)
+		argCount++
+	}
+	if projectID != "" {
+		query += ` AND t.project_id = $` + string(rune(argCount+'0'))
+		args = append(args, projectID)
+		argCount++
+	}
+	if containerID != "" {
+		query += ` AND t.container_id = $` + string(rune(argCount+'0'))
+		args = append(args, containerID)
+		argCount++
+	}
+	if transactionNumber != "" {
+		// Use ILIKE for partial match or exact match? Transaction numbers are usually exact. Let's use ILIKE for user friendliness.
+		query += ` AND t.transaction_number ILIKE $` + string(rune(argCount+'0'))
+		args = append(args, "%"+transactionNumber+"%")
+		argCount++
+	}
+
+	query += ` ORDER BY t.transaction_number ASC`
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	invoices := make([]models.ProjectTransactionDetail, 0)
+	for rows.Next() {
+		var ptd models.ProjectTransactionDetail
+		var containerCurrency models.CurrencyCode
+		err := rows.Scan(
+			&ptd.ID, &ptd.TransactionNumber, &ptd.Type, &ptd.Amount, &ptd.Currency,
+			&ptd.Description, &ptd.DescriptionAr, &ptd.PayeePayer,
+			&ptd.ProjectCode, &ptd.ProjectName,
+			&ptd.ContainerName, &ptd.ContainerType, &containerCurrency, &ptd.TransactionDate, &ptd.CreatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		ptd.Currency = containerCurrency // Or transaction currency is usually same, but struct has one field.
+		invoices = append(invoices, ptd)
+	}
+
+	return invoices, nil
+}
