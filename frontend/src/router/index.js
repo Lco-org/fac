@@ -8,12 +8,7 @@ const routes = [
         component: () => import('@/views/LoginView.vue'),
         meta: { requiresAuth: false },
     },
-    {
-        path: '/register',
-        name: 'Register',
-        component: () => import('@/views/RegisterView.vue'),
-        meta: { requiresAuth: false },
-    },
+
     {
         path: '/',
         component: () => import('@/layouts/DashboardLayout.vue'),

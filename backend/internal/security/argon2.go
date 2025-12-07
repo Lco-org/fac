@@ -24,13 +24,17 @@ type Argon2Params struct {
 	KeyLength   uint32
 }
 
+// DefaultArgon2Params returns OWASP-recommended Argon2id parameters.
+// Memory: 128MB provides strong GPU attack resistance
+// Iterations: 4 time cost for additional protection
+// These parameters are tuned for military-grade security in financial applications.
 func DefaultArgon2Params() *Argon2Params {
 	return &Argon2Params{
-		Memory:      64 * 1024,
-		Iterations:  3,
-		Parallelism: 4,
-		SaltLength:  16,
-		KeyLength:   32,
+		Memory:      128 * 1024, // 128MB memory cost (military-grade)
+		Iterations:  4,          // 4 iterations (time cost)
+		Parallelism: 4,          // 4-way parallelism
+		SaltLength:  16,         // 128-bit salt
+		KeyLength:   32,         // 256-bit key
 	}
 }
 

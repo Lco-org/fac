@@ -282,3 +282,227 @@ func BenchmarkAESEncrypt(b *testing.B) {
 		crypto.Encrypt(data)
 	}
 }
+
+// =====================================================
+// BCrypt Tests
+// =====================================================
+
+func TestBCrypt_HashAndVerify(t *testing.T) {
+	password := "SecurePassword123!"
+
+	hash, err := HashPasswordBCrypt(password, BCryptDefaultCost)
+	if err != nil {
+		t.Fatalf("HashPasswordBCrypt failed: %v", err)
+	}
+
+	if !IsBCryptHash(hash) {
+		t.Error("Hash should be identified as BCrypt")
+	}
+
+	valid, err := VerifyPasswordBCrypt(password, hash)
+	if err != nil {
+		t.Fatalf("VerifyPasswordBCrypt failed: %v", err)
+	}
+	if !valid {
+		t.Error("Correct password should verify successfully")
+	}
+
+	valid, err = VerifyPasswordBCrypt("wrongpassword", hash)
+	if err != nil {
+		t.Fatalf("VerifyPasswordBCrypt failed: %v", err)
+	}
+	if valid {
+		t.Error("Wrong password should not verify")
+	}
+}
+
+func TestBCrypt_Cost(t *testing.T) {
+	password := "TestPassword123"
+
+	// Test minimum cost
+	_, err := HashPasswordBCrypt(password, 10)
+	if err != ErrBCryptCostTooLow {
+		t.Error("Cost below 12 should return ErrBCryptCostTooLow")
+	}
+
+	// Test valid costs
+	for _, cost := range []int{12, 13, 14} {
+		hash, err := HashPasswordBCrypt(password, cost)
+		if err != nil {
+			t.Errorf("Cost %d should work: %v", cost, err)
+		}
+		valid, _ := VerifyPasswordBCrypt(password, hash)
+		if !valid {
+			t.Errorf("Password should verify with cost %d", cost)
+		}
+	}
+}
+
+func TestBCrypt_EmptyPassword(t *testing.T) {
+	_, err := HashPasswordBCrypt("", 14)
+	if err != ErrEmptyPassword {
+		t.Error("Empty password should return ErrEmptyPassword")
+	}
+}
+
+func TestBCrypt_LongPassword(t *testing.T) {
+	longPassword := string(make([]byte, 73)) // 73 bytes, exceeds 72 limit
+	_, err := HashPasswordBCrypt(longPassword, 14)
+	if err != ErrPasswordTooLong {
+		t.Error("Password over 72 bytes should return ErrPasswordTooLong")
+	}
+}
+
+// =====================================================
+// Hash Auto-Detection Tests
+// =====================================================
+
+func TestHashAutoDetection(t *testing.T) {
+	password := "TestPassword123!"
+
+	// Test Argon2id detection
+	argon2Hash, _ := HashPassword(password, nil)
+	if !IsArgon2Hash(argon2Hash) {
+		t.Error("Argon2id hash should be detected")
+	}
+	if IsBCryptHash(argon2Hash) {
+		t.Error("Argon2id hash should not be detected as BCrypt")
+	}
+
+	// Test BCrypt detection
+	bcryptHash, _ := HashPasswordBCrypt(password, 14)
+	if !IsBCryptHash(bcryptHash) {
+		t.Error("BCrypt hash should be detected")
+	}
+	if IsArgon2Hash(bcryptHash) {
+		t.Error("BCrypt hash should not be detected as Argon2id")
+	}
+
+	// Test auto-verification
+	validArgon2, err := VerifyPasswordAuto(password, argon2Hash)
+	if err != nil || !validArgon2 {
+		t.Error("Auto-verify should work with Argon2id hash")
+	}
+
+	validBCrypt, err := VerifyPasswordAuto(password, bcryptHash)
+	if err != nil || !validBCrypt {
+		t.Error("Auto-verify should work with BCrypt hash")
+	}
+
+	// Test wrong password
+	invalidArgon2, _ := VerifyPasswordAuto("wrong", argon2Hash)
+	if invalidArgon2 {
+		t.Error("Wrong password should not verify")
+	}
+}
+
+// =====================================================
+// Input Sanitizer Tests
+// =====================================================
+
+func TestInputSanitizer_SQLInjection(t *testing.T) {
+	sanitizer := NewInputSanitizer()
+
+	injectionPayloads := []string{
+		"' OR '1'='1",
+		"1; DROP TABLE users--",
+		"UNION SELECT * FROM users",
+		"1' AND SLEEP(5)--",
+		"admin'--",
+	}
+
+	for _, payload := range injectionPayloads {
+		if !sanitizer.ContainsSQLInjection(payload) {
+			t.Errorf("Should detect SQL injection: %q", payload)
+		}
+	}
+
+	safeInputs := []string{
+		"John Doe",
+		"user@example.com",
+		"Hello World 123",
+		"مرحبا بالعالم",
+	}
+
+	for _, input := range safeInputs {
+		if sanitizer.ContainsSQLInjection(input) {
+			t.Errorf("Should not flag safe input: %q", input)
+		}
+	}
+}
+
+func TestInputSanitizer_XSS(t *testing.T) {
+	sanitizer := NewInputSanitizer()
+
+	xssPayloads := []string{
+		"<script>alert('xss')</script>",
+		"<img src=x onerror=alert('xss')>",
+		"javascript:alert('xss')",
+	}
+
+	for _, payload := range xssPayloads {
+		if !sanitizer.ContainsXSS(payload) {
+			t.Errorf("Should detect XSS: %q", payload)
+		}
+	}
+}
+
+func TestInputSanitizer_UUID(t *testing.T) {
+	sanitizer := NewInputSanitizer()
+
+	validUUIDs := []string{
+		"550e8400-e29b-41d4-a716-446655440000",
+		"6ba7b810-9dad-11d1-80b4-00c04fd430c8",
+	}
+
+	for _, uuid := range validUUIDs {
+		result := sanitizer.SanitizeUUID(uuid)
+		if result == "" {
+			t.Errorf("Valid UUID should pass: %q", uuid)
+		}
+	}
+
+	invalidUUIDs := []string{
+		"not-a-uuid",
+		"550e8400-e29b-41d4-a716",
+		"'; DROP TABLE users--",
+	}
+
+	for _, uuid := range invalidUUIDs {
+		result := sanitizer.SanitizeUUID(uuid)
+		if result != "" {
+			t.Errorf("Invalid UUID should fail: %q", uuid)
+		}
+	}
+}
+
+func TestInputSanitizer_FinancialAmount(t *testing.T) {
+	sanitizer := NewInputSanitizer()
+
+	validAmounts := []float64{0.01, 100.50, 999999.99}
+	for _, amount := range validAmounts {
+		if !sanitizer.ValidateFinancialAmount(amount) {
+			t.Errorf("Valid amount should pass: %f", amount)
+		}
+	}
+
+	invalidAmounts := []float64{0, -100, 10000000001}
+	for _, amount := range invalidAmounts {
+		if sanitizer.ValidateFinancialAmount(amount) {
+			t.Errorf("Invalid amount should fail: %f", amount)
+		}
+	}
+}
+
+// =====================================================
+// BCrypt Benchmark
+// =====================================================
+
+func BenchmarkBCryptHash(b *testing.B) {
+	password := "BenchmarkPassword123"
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		HashPasswordBCrypt(password, BCryptDefaultCost)
+	}
+}

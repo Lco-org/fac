@@ -77,7 +77,7 @@
       </div>
 
       <!-- Statement Display -->
-      <div v-if="statement" class="bg-white rounded-lg shadow-lg print:shadow-none print:rounded-none">
+      <div v-if="statement" id="printable-area" class="bg-white rounded-lg shadow-lg print:shadow-none print:rounded-none">
         <!-- Official Header -->
         <div class="bg-gradient-to-r from-primary-600 to-primary-700 text-white p-8 rounded-t-lg print:bg-white print:text-black print:border-b-4 print:border-black">
           <div class="text-center">
@@ -93,75 +93,80 @@
         </div>
 
         <!-- Account/Project Info -->
-        <div class="p-8 bg-gray-50 print:bg-white border-b-2 border-gray-200 print:border-black">
-          <h3 class="text-lg font-bold text-gray-900 mb-4">بيانات {{ statementType === 'container' ? 'الحساب' : 'المشروع' }}</h3>
+        <div class="p-4 bg-gray-50 print:bg-white border-b border-gray-200 print:border-black">
+          <h3 class="text-base font-bold text-gray-900 mb-2">بيانات {{ statementType === 'container' ? 'الحساب' : 'المشروع' }}</h3>
           
-          <div v-if="statementType === 'container'" class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="bg-white p-4 rounded-lg border border-gray-200 print:border-gray-400">
-              <div class="text-xs text-gray-500 mb-1">اسم الحساب</div>
-              <div class="text-lg font-bold text-gray-900">{{ statement.container.name }}</div>
+          <!-- Consolidated Single Box -->
+          <div class="bg-white p-3 rounded-md border border-gray-300 print:border-gray-400">
+            <div v-if="statementType === 'container'" class="grid grid-cols-1 md:grid-cols-3 gap-y-2 gap-x-4">
+              <div>
+                <div class="text-xs text-gray-500 mb-0.5 font-medium">اسم الحساب</div>
+                <div class="text-sm font-bold text-gray-900">{{ statement.container.name }}</div>
+              </div>
+              <div>
+                <div class="text-xs text-gray-500 mb-0.5 font-medium">نوع الحساب</div>
+                <div class="text-sm font-bold text-gray-900">{{ statement.container.type === 'bank' ? '🏦 حساب مصرفي' : '💰 خزينة نقدية' }}</div>
+              </div>
+              <div>
+                <div class="text-xs text-gray-500 mb-0.5 font-medium">العملة</div>
+                <div class="text-sm font-bold text-gray-900">{{ getCurrencyName(statement.container.currency) }}</div>
+              </div>
+              
+              <!-- Conditional bank fields in same grid -->
+              <div v-if="statement.container.bank_name">
+                <div class="text-xs text-gray-500 mb-0.5 font-medium">اسم البنك</div>
+                <div class="text-sm font-bold text-gray-900">{{ statement.container.bank_name }}</div>
+              </div>
+              <div v-if="statement.container.account_number" class="col-span-2">
+                <div class="text-xs text-gray-500 mb-0.5 font-medium">رقم الحساب</div>
+                <div class="text-sm font-bold text-gray-900 font-mono">{{ statement.container.account_number }}</div>
+              </div>
             </div>
-            <div class="bg-white p-4 rounded-lg border border-gray-200 print:border-gray-400">
-              <div class="text-xs text-gray-500 mb-1">نوع الحساب</div>
-              <div class="text-lg font-bold text-gray-900">{{ statement.container.type === 'bank' ? '🏦 حساب مصرفي' : '💰 خزينة نقدية' }}</div>
-            </div>
-            <div v-if="statement.container.bank_name" class="bg-white p-4 rounded-lg border border-gray-200 print:border-gray-400">
-              <div class="text-xs text-gray-500 mb-1">اسم البنك</div>
-              <div class="text-lg font-bold text-gray-900">{{ statement.container.bank_name }}</div>
-            </div>
-            <div v-if="statement.container.account_number" class="bg-white p-4 rounded-lg border border-gray-200 print:border-gray-400">
-              <div class="text-xs text-gray-500 mb-1">رقم الحساب</div>
-              <div class="text-lg font-bold text-gray-900 font-mono">{{ statement.container.account_number }}</div>
-            </div>
-            <div class="bg-white p-4 rounded-lg border border-gray-200 print:border-gray-400">
-              <div class="text-xs text-gray-500 mb-1">العملة</div>
-              <div class="text-lg font-bold text-gray-900">{{ getCurrencyName(statement.container.currency) }}</div>
-            </div>
-          </div>
 
-          <div v-if="statementType === 'project'" class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div class="bg-white p-4 rounded-lg border border-gray-200 print:border-gray-400">
-              <div class="text-xs text-gray-500 mb-1">كود المشروع</div>
-              <div class="text-lg font-bold text-gray-900 font-mono">{{ statement.project.code }}</div>
-            </div>
-            <div class="bg-white p-4 rounded-lg border border-gray-200 print:border-gray-400">
-              <div class="text-xs text-gray-500 mb-1">اسم المشروع</div>
-              <div class="text-lg font-bold text-gray-900">{{ statement.project.name }}</div>
-            </div>
-            <div v-if="statement.project.donor_name" class="bg-white p-4 rounded-lg border border-gray-200 print:border-gray-400">
-              <div class="text-xs text-gray-500 mb-1">الجهة المانحة</div>
-              <div class="text-lg font-bold text-gray-900">{{ statement.project.donor_name }}</div>
-            </div>
-            <div v-if="statement.project.budget" class="bg-white p-4 rounded-lg border border-gray-200 print:border-gray-400">
-              <div class="text-xs text-gray-500 mb-1">الميزانية المعتمدة</div>
-              <div class="text-lg font-bold text-gray-900">{{ formatNumber(statement.project.budget) }} {{ statement.project.currency }}</div>
+            <div v-if="statementType === 'project'" class="grid grid-cols-1 md:grid-cols-3 gap-y-2 gap-x-4">
+              <div>
+                <div class="text-xs text-gray-500 mb-0.5 font-medium">كود المشروع</div>
+                <div class="text-sm font-bold text-gray-900 font-mono">{{ statement.project.code }}</div>
+              </div>
+              <div class="col-span-2">
+                <div class="text-xs text-gray-500 mb-0.5 font-medium">اسم المشروع</div>
+                <div class="text-sm font-bold text-gray-900">{{ statement.project.name }}</div>
+              </div>
+              <div v-if="statement.project.donor_name">
+                <div class="text-xs text-gray-500 mb-0.5 font-medium">الجهة المانحة</div>
+                <div class="text-sm font-bold text-gray-900">{{ statement.project.donor_name }}</div>
+              </div>
+              <div v-if="statement.project.budget">
+                <div class="text-xs text-gray-500 mb-0.5 font-medium">الميزانية المعتمدة</div>
+                <div class="text-sm font-bold text-gray-900">{{ formatNumber(statement.project.budget) }} {{ statement.project.currency }}</div>
+              </div>
             </div>
           </div>
         </div>
 
         <!-- Summary -->
-        <div class="p-8 bg-gradient-to-br from-blue-50 to-indigo-50 print:bg-gray-100 border-b-2 border-gray-200 print:border-black">
-          <h3 class="text-xl font-bold text-gray-900 mb-6">📊 الملخص المالي</h3>
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div v-if="statementType === 'container'" class="bg-white p-5 rounded-xl shadow-sm border-r-4 border-blue-500 print:border-2 print:border-gray-400">
-              <div class="text-xs text-gray-600 mb-1">الرصيد الافتتاحي</div>
-              <div class="text-2xl font-bold text-blue-600">{{ formatNumber(statement.summary.opening_balance) }}</div>
+        <div class="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 print:bg-gray-100 border-b-2 border-gray-200 print:border-black">
+          <h3 class="text-base font-bold text-gray-900 mb-3">📊 الملخص المالي</h3>
+          <div class="grid grid-cols-2 md:grid-cols-4 print:grid-cols-4 gap-3">
+            <div v-if="statementType === 'container'" class="bg-white p-2 rounded-lg shadow-sm border-r-4 border-blue-500 print:border-2 print:border-gray-400">
+              <div class="text-[10px] text-gray-600 mb-0.5">الرصيد الافتتاحي</div>
+              <div class="text-lg font-bold text-blue-600">{{ formatNumber(statement.summary.opening_balance) }}</div>
             </div>
-            <div class="bg-white p-5 rounded-xl shadow-sm border-r-4 border-green-500 print:border-2 print:border-gray-400">
-              <div class="text-xs text-gray-600 mb-1">{{ statementType === 'container' ? 'إجمالي المقبوضات' : 'إجمالي الإيرادات' }}</div>
-              <div class="text-2xl font-bold text-green-600">{{ formatNumber(statement.summary.total_income) }}</div>
+            <div class="bg-white p-2 rounded-lg shadow-sm border-r-4 border-green-500 print:border-2 print:border-gray-400">
+              <div class="text-[10px] text-gray-600 mb-0.5">{{ statementType === 'container' ? 'إجمالي المقبوضات' : 'إجمالي الإيرادات' }}</div>
+              <div class="text-lg font-bold text-green-600">{{ formatNumber(statement.summary.total_income) }}</div>
             </div>
-            <div class="bg-white p-5 rounded-xl shadow-sm border-r-4 border-red-500 print:border-2 print:border-gray-400">
-              <div class="text-xs text-gray-600 mb-1">{{ statementType === 'container' ? 'إجمالي المدفوعات' : 'إجمالي المصروفات' }}</div>
-              <div class="text-2xl font-bold text-red-600">{{ formatNumber(statement.summary.total_expenses) }}</div>
+            <div class="bg-white p-2 rounded-lg shadow-sm border-r-4 border-red-500 print:border-2 print:border-gray-400">
+              <div class="text-[10px] text-gray-600 mb-0.5">{{ statementType === 'container' ? 'إجمالي المدفوعات' : 'إجمالي المصروفات' }}</div>
+              <div class="text-lg font-bold text-red-600">{{ formatNumber(statement.summary.total_expenses) }}</div>
             </div>
-            <div class="bg-white p-5 rounded-xl shadow-sm border-r-4 border-primary-500 print:border-2 print:border-gray-400">
-              <div class="text-xs text-gray-600 mb-1">{{ statementType === 'container' ? 'الرصيد الختامي' : 'صافي المركز' }}</div>
-              <div class="text-2xl font-bold text-primary-600">{{ formatNumber(statementType === 'container' ? statement.summary.closing_balance : statement.summary.net_position) }}</div>
+            <div class="bg-white p-2 rounded-lg shadow-sm border-r-4 border-primary-500 print:border-2 print:border-gray-400">
+              <div class="text-[10px] text-gray-600 mb-0.5">{{ statementType === 'container' ? 'الرصيد الختامي' : 'صافي المركز' }}</div>
+              <div class="text-lg font-bold text-primary-600">{{ formatNumber(statementType === 'container' ? statement.summary.closing_balance : statement.summary.net_position) }}</div>
             </div>
           </div>
-          <div class="mt-4 bg-white p-4 rounded-lg border border-gray-200 print:border-gray-400">
-            <div class="text-sm text-gray-600">عدد الحركات المالية: <span class="font-bold text-gray-900">{{ statement.summary.transaction_count }} حركة</span></div>
+          <div class="mt-2 text-xs text-gray-500">
+            <span>عدد الحركات: {{ statement.summary.transaction_count }}</span>
           </div>
         </div>
 
@@ -208,7 +213,8 @@
               </tbody>
               <tfoot class="bg-gray-100 print:bg-gray-200 border-t-4 border-gray-800 print:border-black">
                 <tr>
-                  <td colspan="{{ statementType === 'container' ? '4' : '3' }}" class="px-4 py-4 text-right font-bold text-lg">الإجمالي:</td>
+                  <td colspan="3"></td>
+                  <td class="px-4 py-4 text-center font-bold text-lg">الإجمالي:</td>
                   <td class="px-4 py-4 text-center font-bold text-xl text-green-600">{{ formatNumber(statement.summary.total_income) }}</td>
                   <td class="px-4 py-4 text-center font-bold text-xl text-red-600">{{ formatNumber(statement.summary.total_expenses) }}</td>
                   <td v-if="statementType === 'container'" class="px-4 py-4 text-center font-bold text-xl text-blue-600">{{ formatNumber(statement.summary.closing_balance) }}</td>
@@ -313,12 +319,14 @@ const printStatement = () => window.print()
 
 const formatDate = (dateString) => {
   if (!dateString) return ''
-  return new Date(dateString).toLocaleDateString('ar-EG', { year: 'numeric', month: '2-digit', day: '2-digit' })
+  // Use en-GB to get DD/MM/YYYY with Western digits (0-9)
+  return new Date(dateString).toLocaleDateString('en-GB', { year: 'numeric', month: '2-digit', day: '2-digit' })
 }
 
 const formatTime = (dateString) => {
   if (!dateString) return ''
-  return new Date(dateString).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })
+  // Use en-GB to get HH:MM with Western digits (0-9)
+  return new Date(dateString).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 }
 
 const formatNumber = (number) => {
@@ -362,7 +370,33 @@ onMounted(() => {
 <style scoped>
 @media print {
   .no-print { display: none !important; }
-  body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-  @page { margin: 1cm; size: A4; }
+  
+  /* Reset page background */
+  body, .min-h-screen { 
+    background-color: white !important; 
+    height: auto !important;
+  }
+
+  /* Hide everything in the body by default */
+  body * {
+    visibility: hidden;
+  }
+
+  /* Explicitly show the statement container and its children */
+  #printable-area, #printable-area * {
+    visibility: visible;
+  }
+
+  /* Position it at top-left to encompass the page */
+  #printable-area {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  @page { margin: 1cm; size: A4 landscape; }
 }
 </style>

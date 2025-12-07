@@ -462,13 +462,16 @@ func (s *ReportService) GetContainerStatement(ctx context.Context, containerID s
 
 	query += ` ORDER BY t.transaction_date ASC, t.created_at ASC`
 
+	log.Printf("[DEBUG] GetContainerStatement: containerID=%s, query=%s, args=%v", containerID, query, args)
+
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
+		log.Printf("[ERROR] GetContainerStatement query failed: %v", err)
 		return nil, err
 	}
 	defer rows.Close()
 
-	var transactions []models.TransactionDetail
+	transactions := make([]models.TransactionDetail, 0)
 	var totalIncome, totalExpenses float64
 	var openingBalance, closingBalance float64
 	firstTransaction := true
@@ -567,7 +570,7 @@ func (s *ReportService) GetProjectStatement(ctx context.Context, projectID strin
 	}
 	defer rows.Close()
 
-	var transactions []models.ProjectTransactionDetail
+	transactions := make([]models.ProjectTransactionDetail, 0)
 	var totalIncome, totalExpenses float64
 
 	for rows.Next() {

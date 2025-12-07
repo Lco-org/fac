@@ -54,6 +54,8 @@ func (h *ReportHandler) GetContainerStatement(c *fiber.Ctx) error {
 	if end := c.Query("end_date"); end != "" {
 		t, err := time.Parse("2006-01-02", end)
 		if err == nil {
+			// Set to end of day
+			t = t.Add(24 * time.Hour).Add(-1 * time.Nanosecond)
 			endDate = &t
 		}
 	}
@@ -88,6 +90,8 @@ func (h *ReportHandler) GetProjectStatement(c *fiber.Ctx) error {
 	if end := c.Query("end_date"); end != "" {
 		t, err := time.Parse("2006-01-02", end)
 		if err == nil {
+			// Set to end of day
+			t = t.Add(24 * time.Hour).Add(-1 * time.Nanosecond)
 			endDate = &t
 		}
 	}

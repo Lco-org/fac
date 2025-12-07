@@ -119,3 +119,50 @@ func (s *CryptoService) Decrypt(encoded string) ([]byte, error) {
 
 	return plaintext, nil
 }
+
+// EncryptString is a convenience method for encrypting string data
+func (s *CryptoService) EncryptString(plaintext string) (string, error) {
+	if plaintext == "" {
+		return "", nil
+	}
+	return s.Encrypt([]byte(plaintext))
+}
+
+// DecryptString is a convenience method for decrypting to string data
+func (s *CryptoService) DecryptString(ciphertext string) (string, error) {
+	if ciphertext == "" {
+		return "", nil
+	}
+	plaintext, err := s.Decrypt(ciphertext)
+	if err != nil {
+		return "", err
+	}
+	return string(plaintext), nil
+}
+
+// EncryptSensitiveField encrypts a field only if encryption is enabled (key is set)
+// Returns the original value if encryption is not configured
+func (s *CryptoService) EncryptSensitiveField(value string) (string, error) {
+	if s == nil || len(s.key) == 0 {
+		return value, nil
+	}
+	return s.EncryptString(value)
+}
+
+// DecryptSensitiveField decrypts a field only if it appears to be encrypted
+// Returns the original value if it doesn't look encrypted
+func (s *CryptoService) DecryptSensitiveField(value string) (string, error) {
+	if s == nil || len(s.key) == 0 {
+		return value, nil
+	}
+	// Check if the value looks like base64-encoded ciphertext
+	if len(value) < 20 {
+		return value, nil
+	}
+	decrypted, err := s.DecryptString(value)
+	if err != nil {
+		// If decryption fails, assume it's not encrypted
+		return value, nil
+	}
+	return decrypted, nil
+}

@@ -42,6 +42,11 @@ func main() {
 	}
 	emailService := services.NewEmailService(emailConfig)
 
+	// Initialize OTP cleanup scheduler for expired codes
+	otpCleanupService := services.NewOTPCleanupService(db.DB)
+	otpCleanupService.StartCleanupScheduler()
+	defer otpCleanupService.StopCleanupScheduler()
+
 	authService := services.NewAuthService(db, cfg, emailService)
 	userService := services.NewUserService(db, cfg)
 	containerService := services.NewContainerService(db)

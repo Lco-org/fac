@@ -124,10 +124,18 @@ func (s *ContainerService) UpdateContainer(ctx context.Context, id uuid.UUID, re
 }
 
 func (s *ContainerService) DeleteContainer(ctx context.Context, id uuid.UUID) error {
+	// First, delete all transactions related to this container
+	_, err := s.db.ExecContext(ctx, `
+		DELETE FROM transactions WHERE container_id = $1
+	`, id)
+	if err != nil {
+		return err
+	}
+
+	// Then delete the container
 	result, err := s.db.ExecContext(ctx, `
 		DELETE FROM financial_containers WHERE id = $1
 	`, id)
-
 	if err != nil {
 		return err
 	}
