@@ -109,10 +109,10 @@ func Load() *Config {
 			Argon2Parallelism: uint8(getEnvAsInt("ARGON2_PARALLELISM", 4)),
 			RateLimitMax:      getEnvAsInt("RATE_LIMIT_MAX", 100),
 			RateLimitWindow:   rateLimitWindow,
-			CookieSecure:      getEnvAsBool("COOKIE_SECURE", true),
+			CookieSecure:      getEnvAsBool("COOKIE_SECURE", false),
 		},
 		CORS: CORSConfig{
-			Origin:      getEnv("CORS_ORIGIN", "http://localhost:5173"),
+			Origin:      getEnv("CORS_ORIGIN", "http://localhost:5173,http://192.168.3.22:5173,http://192.168.98.63:5173"),
 			Credentials: getEnvAsBool("CORS_CREDENTIALS", true),
 		},
 		Upload: UploadConfig{

@@ -217,7 +217,7 @@ func (h *AuthHandler) completeLogin(c *fiber.Ctx, user *models.User) error {
 		Expires:  time.Now().Add(h.cfg.JWT.Expiry),
 		HTTPOnly: true,
 		Secure:   h.cfg.Security.CookieSecure,
-		SameSite: "Strict",
+		SameSite: "Lax",
 		Path:     "/",
 	})
 
@@ -246,7 +246,7 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 		Expires:  time.Now().Add(-time.Hour),
 		HTTPOnly: true,
 		Secure:   h.cfg.Security.CookieSecure,
-		SameSite: "Strict",
+		SameSite: "Lax",
 		Path:     "/",
 	})
 
@@ -289,7 +289,7 @@ func (h *AuthHandler) RevokeAllSessions(c *fiber.Ctx) error {
 		Expires:  time.Now().Add(-time.Hour),
 		HTTPOnly: true,
 		Secure:   h.cfg.Security.CookieSecure,
-		SameSite: "Strict",
+		SameSite: "Lax",
 		Path:     "/",
 	})
 
@@ -344,7 +344,7 @@ func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
 		Expires:  time.Now().Add(-time.Hour),
 		HTTPOnly: true,
 		Secure:   h.cfg.Security.CookieSecure,
-		SameSite: "Strict",
+		SameSite: "Lax",
 		Path:     "/",
 	})
 

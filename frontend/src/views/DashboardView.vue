@@ -669,7 +669,7 @@ const exportToExcel = () => {
               
               <!-- Bank Transactions -->
               <div class="overflow-x-auto">
-                <table class="min-w-full text-sm">
+                <table class="min-w-full text-sm responsive-table">
                   <thead>
                     <tr class="bg-gray-50 text-gray-500">
                       <th class="px-3 py-2 text-right">التاريخ</th>
@@ -680,10 +680,10 @@ const exportToExcel = () => {
                   </thead>
                   <tbody class="divide-y divide-gray-100">
                     <tr v-for="tx in bank.last_transactions" :key="tx.id">
-                      <td class="px-3 py-2 whitespace-nowrap">{{ formatDate(tx.transaction_date) }}</td>
-                      <td class="px-3 py-2">{{ tx.description_ar || tx.description }}</td>
-                      <td class="px-3 py-2 text-gray-600">{{ getTransactionLabel(tx.type) }}</td>
-                      <td class="px-3 py-2 font-medium" :class="['income_grant', 'income_donation'].includes(tx.type) || (tx.type === 'transfer' && tx.balance_after > tx.balance_before) ? 'text-green-600' : 'text-red-600'">
+                      <td class="px-3 py-2 whitespace-nowrap" data-label="التاريخ">{{ formatDate(tx.transaction_date) }}</td>
+                      <td class="px-3 py-2" data-label="البيان">{{ tx.description_ar || tx.description }}</td>
+                      <td class="px-3 py-2 text-gray-600" data-label="نوع العملية">{{ getTransactionLabel(tx.type) }}</td>
+                      <td class="px-3 py-2 font-medium" data-label="القيمة" :class="['income_grant', 'income_donation'].includes(tx.type) || (tx.type === 'transfer' && tx.balance_after > tx.balance_before) ? 'text-green-600' : 'text-red-600'">
                         {{ formatCurrency(tx.amount, tx.currency) }}
                       </td>
                     </tr>
@@ -719,7 +719,7 @@ const exportToExcel = () => {
               
               <!-- Cash Transactions -->
               <div class="overflow-x-auto">
-                <table class="min-w-full text-sm">
+                <table class="min-w-full text-sm responsive-table">
                   <thead>
                     <tr class="bg-gray-50 text-gray-500">
                       <th class="px-3 py-2 text-right">التاريخ</th>
@@ -730,10 +730,10 @@ const exportToExcel = () => {
                   </thead>
                   <tbody class="divide-y divide-gray-100">
                     <tr v-for="tx in cash.last_transactions" :key="tx.id">
-                      <td class="px-3 py-2 whitespace-nowrap">{{ formatDate(tx.transaction_date) }}</td>
-                      <td class="px-3 py-2">{{ tx.description_ar || tx.description }}</td>
-                      <td class="px-3 py-2 text-gray-600">{{ getTransactionLabel(tx.type) }}</td>
-                      <td class="px-3 py-2 font-medium" :class="['income_grant', 'income_donation'].includes(tx.type) || (tx.type === 'transfer' && tx.balance_after > tx.balance_before) ? 'text-green-600' : 'text-red-600'">
+                      <td class="px-3 py-2 whitespace-nowrap" data-label="التاريخ">{{ formatDate(tx.transaction_date) }}</td>
+                      <td class="px-3 py-2" data-label="البيان">{{ tx.description_ar || tx.description }}</td>
+                      <td class="px-3 py-2 text-gray-600" data-label="نوع العملية">{{ getTransactionLabel(tx.type) }}</td>
+                      <td class="px-3 py-2 font-medium" data-label="القيمة" :class="['income_grant', 'income_donation'].includes(tx.type) || (tx.type === 'transfer' && tx.balance_after > tx.balance_before) ? 'text-green-600' : 'text-red-600'">
                         {{ formatCurrency(tx.amount, tx.currency) }}
                       </td>
                     </tr>
@@ -769,7 +769,7 @@ const exportToExcel = () => {
 
               <!-- Project Transactions -->
               <div class="overflow-x-auto">
-                <table class="min-w-full text-sm">
+                <table class="min-w-full text-sm responsive-table">
                   <thead>
                     <tr class="bg-gray-50 text-gray-500">
                       <th class="px-3 py-2 text-right">التاريخ</th>
@@ -780,10 +780,10 @@ const exportToExcel = () => {
                   </thead>
                   <tbody class="divide-y divide-gray-100">
                     <tr v-for="tx in project.last_transactions" :key="tx.id">
-                      <td class="px-3 py-2 whitespace-nowrap">{{ formatDate(tx.transaction_date) }}</td>
-                      <td class="px-3 py-2">{{ tx.description_ar || tx.description }}</td>
-                      <td class="px-3 py-2 text-gray-600">{{ getTransactionLabel(tx.type) }}</td>
-                      <td class="px-3 py-2 font-medium" :class="['income_grant', 'income_donation'].includes(tx.type) ? 'text-green-600' : 'text-red-600'">
+                      <td class="px-3 py-2 whitespace-nowrap" data-label="التاريخ">{{ formatDate(tx.transaction_date) }}</td>
+                      <td class="px-3 py-2" data-label="البيان">{{ tx.description_ar || tx.description }}</td>
+                      <td class="px-3 py-2 text-gray-600" data-label="نوع العملية">{{ getTransactionLabel(tx.type) }}</td>
+                      <td class="px-3 py-2 font-medium" data-label="القيمة" :class="['income_grant', 'income_donation'].includes(tx.type) ? 'text-green-600' : 'text-red-600'">
                         {{ formatCurrency(tx.amount, tx.currency) }}
                       </td>
                     </tr>
@@ -811,7 +811,7 @@ const exportToExcel = () => {
               <span class="ml-2">📥</span> آخر المقبوضات
             </h2>
             <div class="overflow-x-auto">
-              <table class="min-w-full text-sm">
+              <table class="min-w-full text-sm responsive-table">
                 <thead>
                   <tr class="bg-gray-50 text-gray-500">
                     <th class="px-3 py-2 text-right">التاريخ</th>
@@ -822,13 +822,13 @@ const exportToExcel = () => {
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                   <tr v-for="tx in dashboardData.recent_income" :key="tx.id" class="hover:bg-gray-50">
-                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">{{ formatDate(tx.transaction_date) }}</td>
-                    <td class="px-3 py-2">
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-600" data-label="التاريخ">{{ formatDate(tx.transaction_date) }}</td>
+                    <td class="px-3 py-2" data-label="البيان">
                       <div class="font-medium text-gray-900">{{ tx.description_ar || tx.description }}</div>
                       <div class="text-xs text-gray-500">{{ tx.container_name }}</div>
                     </td>
-                    <td class="px-3 py-2 text-gray-600">{{ getTransactionLabel(tx.type) }}</td>
-                    <td class="px-3 py-2 font-bold text-green-600">
+                    <td class="px-3 py-2 text-gray-600" data-label="نوع العملية">{{ getTransactionLabel(tx.type) }}</td>
+                    <td class="px-3 py-2 font-bold text-green-600" data-label="القيمة">
                       {{ formatCurrency(tx.amount, tx.currency) }}
                     </td>
                   </tr>
@@ -846,7 +846,7 @@ const exportToExcel = () => {
               <span class="ml-2">📤</span> آخر المصروفات
             </h2>
             <div class="overflow-x-auto">
-              <table class="min-w-full text-sm">
+              <table class="min-w-full text-sm responsive-table">
                 <thead>
                   <tr class="bg-gray-50 text-gray-500">
                     <th class="px-3 py-2 text-right">التاريخ</th>
@@ -857,13 +857,13 @@ const exportToExcel = () => {
                 </thead>
                 <tbody class="divide-y divide-gray-100">
                   <tr v-for="tx in dashboardData.recent_expenses" :key="tx.id" class="hover:bg-gray-50">
-                    <td class="px-3 py-2 whitespace-nowrap text-gray-600">{{ formatDate(tx.transaction_date) }}</td>
-                    <td class="px-3 py-2">
+                    <td class="px-3 py-2 whitespace-nowrap text-gray-600" data-label="التاريخ">{{ formatDate(tx.transaction_date) }}</td>
+                    <td class="px-3 py-2" data-label="البيان">
                       <div class="font-medium text-gray-900">{{ tx.description_ar || tx.description }}</div>
                       <div class="text-xs text-gray-500">{{ tx.container_name }}</div>
                     </td>
-                    <td class="px-3 py-2 text-gray-600">{{ getTransactionLabel(tx.type) }}</td>
-                    <td class="px-3 py-2 font-bold text-red-600">
+                    <td class="px-3 py-2 text-gray-600" data-label="نوع العملية">{{ getTransactionLabel(tx.type) }}</td>
+                    <td class="px-3 py-2 font-bold text-red-600" data-label="القيمة">
                       {{ formatCurrency(tx.amount, tx.currency) }}
                     </td>
                   </tr>

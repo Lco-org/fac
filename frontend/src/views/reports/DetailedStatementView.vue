@@ -174,7 +174,7 @@
         <div class="p-8">
           <h3 class="text-xl font-bold text-gray-900 mb-6">📝 تفاصيل الحركات المالية</h3>
           <div class="overflow-x-auto border-2 border-gray-200 rounded-lg print:border-black">
-            <table class="min-w-full divide-y-2 divide-gray-200 print:divide-black">
+            <table class="min-w-full divide-y-2 divide-gray-200 print:divide-black responsive-table">
               <thead class="bg-gray-800 text-white print:bg-gray-200 print:text-black">
                 <tr>
                   <th class="px-4 py-4 text-right text-sm font-bold">التاريخ</th>
@@ -189,28 +189,28 @@
               </thead>
               <tbody class="bg-white divide-y divide-gray-200 print:divide-gray-400">
                 <tr v-for="(transaction, index) in statement.transactions" :key="transaction.id" :class="index % 2 === 0 ? 'bg-white' : 'bg-gray-50'">
-                  <td class="px-4 py-3 whitespace-nowrap text-sm font-medium">{{ formatDate(transaction.transaction_date) }}</td>
-                  <td class="px-4 py-3 whitespace-nowrap text-sm font-mono text-primary-600 font-bold">
+                  <td class="px-4 py-3 whitespace-nowrap text-sm font-medium" data-label="التاريخ">{{ formatDate(transaction.transaction_date) }}</td>
+                  <td class="px-4 py-3 whitespace-nowrap text-sm font-mono text-primary-600 font-bold" data-label="رقم المستند">
                     <a :href="`/receipt/${transaction.id}`" target="_blank" class="hover:underline hover:text-primary-800">
                         {{ transaction.transaction_number }}
                     </a>
                   </td>
-                  <td class="px-4 py-3 text-sm">
+                  <td class="px-4 py-3 text-sm" data-label="البيان">
                     <div class="font-semibold">{{ getTransactionTypeName(transaction.type) }}</div>
                     <div class="text-xs text-gray-600">{{ transaction.description }}</div>
                     <div v-if="transaction.payee_payer" class="text-xs text-gray-500 mt-1">{{ transaction.payee_payer }}</div>
                   </td>
-                  <td v-if="statementType === 'container'" class="px-4 py-3 text-sm font-medium">{{ transaction.project_name }}</td>
-                  <td v-if="statementType === 'project'" class="px-4 py-3 text-sm">{{ transaction.container_name }}</td>
-                  <td class="px-4 py-3 text-center">
+                  <td v-if="statementType === 'container'" class="px-4 py-3 text-sm font-medium" data-label="المشروع">{{ transaction.project_name }}</td>
+                  <td v-if="statementType === 'project'" class="px-4 py-3 text-sm" data-label="الحساب">{{ transaction.container_name }}</td>
+                  <td class="px-4 py-3 text-center" data-label="مدين (إضافة)">
                     <span v-if="isCredit(transaction)" class="text-lg font-bold text-green-600">{{ formatNumber(transaction.amount) }}</span>
                     <span v-else class="text-gray-300">-</span>
                   </td>
-                  <td class="px-4 py-3 text-center">
+                  <td class="px-4 py-3 text-center" data-label="دائن (خصم)">
                     <span v-if="!isCredit(transaction)" class="text-lg font-bold text-red-600">{{ formatNumber(transaction.amount) }}</span>
                     <span v-else class="text-gray-300">-</span>
                   </td>
-                  <td v-if="statementType === 'container'" class="px-4 py-3 text-center">
+                  <td v-if="statementType === 'container'" class="px-4 py-3 text-center" data-label="الرصيد">
                     <span class="text-lg font-bold text-blue-600">{{ formatNumber(transaction.balance_after) }}</span>
                   </td>
                 </tr>

@@ -43,3 +43,109 @@
     @apply text-gray-500 font-semibold;
   }
 }
+
+/* ============================================
+   RESPONSIVE TABLE STYLING FOR MOBILE DEVICES
+   Tables transform to vertical card layout on phones
+   ============================================ */
+
+/* Mobile-first responsive table - transforms to cards on small screens */
+@media screen and (max-width: 768px) {
+  /* Hide table headers on mobile - will use data-label instead */
+  .responsive-table thead {
+    display: none;
+  }
+  
+  /* Make table display as block */
+  .responsive-table,
+  .responsive-table tbody,
+  .responsive-table tr,
+  .responsive-table td {
+    display: block;
+    width: 100%;
+  }
+  
+  /* Style each row as a card */
+  .responsive-table tbody tr {
+    margin-bottom: 1rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.75rem;
+    padding: 1rem;
+    background-color: white;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+  
+  /* Style each cell */
+  .responsive-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #f3f4f6;
+    text-align: left;
+  }
+  
+  /* Remove border from last cell */
+  .responsive-table td:last-child {
+    border-bottom: none;
+  }
+  
+  /* Add label before each cell content using data-label attribute */
+  .responsive-table td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: #6b7280;
+    text-align: right;
+    padding-left: 1rem;
+    flex-shrink: 0;
+  }
+  
+  /* Cell content */
+  .responsive-table td > * {
+    text-align: left;
+  }
+  
+  /* Footer cells also transform */
+  .responsive-table tfoot {
+    display: block;
+  }
+  
+  .responsive-table tfoot tr {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background-color: #f9fafb;
+    border-radius: 0.75rem;
+    margin-top: 1rem;
+  }
+  
+  .responsive-table tfoot td {
+    display: inline-block;
+    width: auto;
+    border: none;
+    padding: 0.25rem 0.5rem;
+  }
+  
+  .responsive-table tfoot td[colspan] {
+    width: 100%;
+    text-align: center;
+    margin-bottom: 0.5rem;
+  }
+}
+
+/* Alternative: Simple stacked layout for very small screens */
+@media screen and (max-width: 480px) {
+  .responsive-table td {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+  
+  .responsive-table td::before {
+    padding-left: 0;
+    font-size: 0.75rem;
+    margin-bottom: 0.125rem;
+  }
+}

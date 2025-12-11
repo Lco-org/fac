@@ -103,7 +103,7 @@ func (s *UserService) CreateUser(ctx context.Context, req *models.CreateUserRequ
 	}
 
 	var exists bool
-	err := s.db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)", req.Username).Scan(&exists)
+	err := s.db.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM users WHERE LOWER(username) = LOWER($1))", req.Username).Scan(&exists)
 	if err != nil {
 		return nil, err
 	}

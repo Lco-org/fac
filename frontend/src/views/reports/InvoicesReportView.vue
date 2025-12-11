@@ -132,7 +132,7 @@
         <!-- Transactions Table -->
         <div class="p-6">
           <div class="overflow-x-auto border-2 border-gray-200 rounded-lg print:border-black">
-            <table class="min-w-full divide-y-2 divide-gray-200 print:divide-black">
+            <table class="min-w-full divide-y-2 divide-gray-200 print:divide-black responsive-table">
               <thead class="bg-gray-800 text-white print:bg-gray-200 print:text-black">
                 <tr>
                   <th scope="col" class="px-4 py-4 text-right text-sm font-bold whitespace-nowrap">رقم الفاتورة</th>
@@ -147,14 +147,14 @@
               </thead>
               <tbody class="bg-white divide-y divide-gray-200 print:divide-gray-400">
                 <tr v-for="(invoice, index) in invoices" :key="invoice.id" :class="index % 2 === 0 ? 'bg-white' : 'bg-gray-50'">
-                  <td class="px-4 py-3 whitespace-nowrap text-sm font-mono text-primary-600 font-bold">
+                  <td class="px-4 py-3 whitespace-nowrap text-sm font-mono text-primary-600 font-bold" data-label="رقم الفاتورة">
                      <a :href="`/receipt/${invoice.id}`" target="_blank" class="hover:underline hover:text-primary-800">
                         {{ invoice.transaction_number }}
                     </a>
                   </td>
-                  <td class="px-4 py-3 whitespace-nowrap text-sm font-medium">{{ formatDate(invoice.transaction_date) }}</td>
-                  <td class="px-4 py-3 text-sm">{{ invoice.payee_payer || '-' }}</td>
-                  <td class="px-4 py-3 text-sm">
+                  <td class="px-4 py-3 whitespace-nowrap text-sm font-medium" data-label="التاريخ">{{ formatDate(invoice.transaction_date) }}</td>
+                  <td class="px-4 py-3 text-sm" data-label="الجهة">{{ invoice.payee_payer || '-' }}</td>
+                  <td class="px-4 py-3 text-sm" data-label="النوع">
                     <span 
                         class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium print:bg-transparent print:text-black print:p-0"
                         :class="isCredit(invoice.type) ? 'bg-green-100 text-green-800' : (invoice.type === 'transfer' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800')"
@@ -162,12 +162,12 @@
                         {{ getTransactionTypeName(invoice.type) }}
                     </span>
                   </td>
-                  <td class="px-4 py-3 text-sm">{{ invoice.project_name || 'عام / غير محدد' }}</td>
-                   <td class="px-4 py-3 text-sm">{{ invoice.container_name }}</td>
-                  <td class="px-4 py-3 whitespace-nowrap text-sm font-bold print:text-black" :class="getTransactionColor(invoice.type)">
+                  <td class="px-4 py-3 text-sm" data-label="المشروع">{{ invoice.project_name || 'عام / غير محدد' }}</td>
+                   <td class="px-4 py-3 text-sm" data-label="الحساب">{{ invoice.container_name }}</td>
+                  <td class="px-4 py-3 whitespace-nowrap text-sm font-bold print:text-black" data-label="المبلغ" :class="getTransactionColor(invoice.type)">
                     {{ formatNumber(invoice.amount) }} {{ invoice.currency }}
                   </td>
-                  <td class="px-4 py-3 whitespace-nowrap text-center text-sm font-medium no-print">
+                  <td class="px-4 py-3 whitespace-nowrap text-center text-sm font-medium no-print" data-label="إجراءات">
                     <a 
                         :href="`/receipt/${invoice.id}`" 
                         target="_blank"

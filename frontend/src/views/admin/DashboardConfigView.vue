@@ -161,7 +161,7 @@ const moveDown = (index) => {
     </div>
 
     <div v-else class="bg-white rounded-lg shadow overflow-hidden">
-      <table class="min-w-full divide-y divide-gray-200">
+      <table class="min-w-full divide-y divide-gray-200 responsive-table">
         <thead class="bg-gray-50">
           <tr>
             <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -192,7 +192,7 @@ const moveDown = (index) => {
             :class="{ 'opacity-50': draggedIndex === index }"
           >
             <!-- Order Controls -->
-            <td class="px-6 py-4 whitespace-nowrap">
+            <td class="px-6 py-4 whitespace-nowrap" data-label="الترتيب">
               <div class="flex items-center gap-2">
                 <!-- Drag Handle -->
                 <div class="text-gray-400 hover:text-gray-600 cursor-grab active:cursor-grabbing">
@@ -233,13 +233,13 @@ const moveDown = (index) => {
             </td>
 
             <!-- Widget Name -->
-            <td class="px-6 py-4 whitespace-nowrap">
+            <td class="px-6 py-4 whitespace-nowrap" data-label="القسم">
               <div class="text-sm font-medium text-gray-900">{{ widget.widget_name }}</div>
               <div class="text-xs text-gray-500">{{ widget.widget_key }}</div>
             </td>
 
             <!-- Enable/Disable Toggle -->
-            <td class="px-6 py-4 whitespace-nowrap">
+            <td class="px-6 py-4 whitespace-nowrap" data-label="الحالة">
               <button 
                 @click="widget.is_enabled = !widget.is_enabled; saveWidget(widget)"
                 class="relative inline-flex flex-shrink-0 h-6 w-11 border-2 border-transparent rounded-full cursor-pointer transition-colors ease-in-out duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
@@ -253,7 +253,7 @@ const moveDown = (index) => {
             </td>
 
             <!-- Allowed Roles -->
-            <td class="px-6 py-4">
+            <td class="px-6 py-4" data-label="الأدوار المسموح لها">
               <div class="flex flex-wrap gap-2">
                 <button
                   v-for="role in availableRoles"
