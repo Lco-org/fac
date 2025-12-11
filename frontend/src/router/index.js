@@ -97,6 +97,24 @@ const routes = [
                 meta: { requiresAuth: true },
             },
             {
+                path: 'hr/employees',
+                name: 'HREmployees',
+                component: () => import('@/views/hr/HREmployeesView.vue'),
+                meta: { requiresRole: ['admin', 'hr'] },
+            },
+            {
+                path: 'hr/deductions',
+                name: 'Deductions',
+                component: () => import('@/views/hr/DeductionsView.vue'),
+                meta: { requiresRole: ['admin', 'hr'] },
+            },
+            {
+                path: 'hr/bonuses',
+                name: 'Bonuses',
+                component: () => import('@/views/hr/BonusesView.vue'),
+                meta: { requiresRole: ['admin', 'hr'] },
+            },
+            {
                 path: 'reports/detailed-statement',
                 name: 'DetailedStatement',
                 component: () => import('@/views/reports/DetailedStatementView.vue'),
@@ -132,6 +150,7 @@ const router = createRouter({
 // Navigation guard
 router.beforeEach(async (to, from, next) => {
     const authStore = useAuthStore()
+    console.log(`Navigating to: ${to.path}, Role: ${authStore.userRole}, Required: ${to.meta.requiresRole}`)
 
     if (to.meta.requiresAuth || to.path.startsWith('/reports/')) { // Reports typically need auth
         if (!authStore.isAuthenticated) {

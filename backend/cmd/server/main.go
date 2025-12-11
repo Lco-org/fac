@@ -58,6 +58,7 @@ func main() {
 	dashboardService := services.NewDashboardService(db)
 	transferService := services.NewTransferService(db)
 	receiptService := services.NewReceiptService(db)
+	hrService := services.NewHRService(db)
 
 	authHandler := handlers.NewAuthHandler(authService, cfg)
 	userHandler := handlers.NewUserHandler(userService)
@@ -70,6 +71,7 @@ func main() {
 	dashboardHandler := handlers.NewDashboardHandler(dashboardService)
 	transferHandler := handlers.NewTransferHandler(transferService)
 	receiptHandler := handlers.NewReceiptHandler(receiptService)
+	hrHandler := handlers.NewHRHandler(hrService)
 
 	app := fiber.New(fiber.Config{
 		AppName:      "CSO ERP System",
@@ -177,6 +179,13 @@ func main() {
 	members.Delete("/:id", memberHandler.DeleteMember)
 	members.Post("/:id/renew", memberHandler.RenewMembership)
 	members.Get("/:id/subscriptions", memberHandler.GetSubscriptions)
+
+	hr := protected.Group("/hr", middleware.RequireRole(models.RoleHR))
+	hr.Post("/deductions", hrHandler.CreateDeduction)
+	hr.Get("/deductions", hrHandler.ListDeductions)
+	hr.Post("/bonuses", hrHandler.CreateBonus)
+	hr.Get("/bonuses", hrHandler.ListBonuses)
+	hr.Get("/employees/profile", hrHandler.GetEmployeeFinancialProfile)
 
 	port := cfg.App.Port
 	log.Printf("🚀 Server starting on port %s", port)

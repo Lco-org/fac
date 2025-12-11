@@ -7,6 +7,29 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 const sidebarOpen = ref(true)
+const openMenus = ref([])
+
+// Explicit navigation handler for debugging
+const handleMenuClick = (path) => {
+  console.log('Menu clicked:', path)
+  try {
+    router.push(path)
+  } catch (e) {
+    console.error('Navigation error:', e)
+    alert('Navigation failed: ' + e.message)
+  }
+}
+
+const toggleMenu = (title) => {
+  if (!sidebarOpen.value) sidebarOpen.value = true
+  
+  const index = openMenus.value.indexOf(title)
+  if (index === -1) {
+    openMenus.value.push(title)
+  } else {
+    openMenus.value.splice(index, 1)
+  }
+}
 
 const menuItems = computed(() => {
   const items = [
@@ -31,7 +54,6 @@ const menuItems = computed(() => {
     },
     {
       title: 'المقبوضات',
-
       icon: '💰',
       roles: ['admin', 'finance'],
       children: [
@@ -56,14 +78,24 @@ const menuItems = computed(() => {
       roles: ['admin', 'finance'],
     },
     {
+      title: 'الموارد البشرية',
+      icon: '👥',
+      roles: ['admin', 'hr'],
+      children: [
+        { title: 'الموظفين', path: '/hr/employees' },
+        { title: 'الخصومات', path: '/hr/deductions' },
+        { title: 'المكافآت', path: '/hr/bonuses' },
+      ],
+    },
+    {
       title: 'التقارير',
       icon: '📈',
-      roles: ['admin', 'finance', 'auditor'],
+      roles: ['admin', 'finance', 'auditor', 'hr'],
       children: [
-
         { title: 'الجرد المفصل', path: '/reports/detailed-statement' },
         { title: 'الموقف اليومي', path: '/reports/daily-position' },
         ...(authStore.hasPermission('view_invoices') ? [{ title: 'تقرير الفواتير', path: '/reports/invoices' }] : []),
+        { title: 'كشف حساب موظف', path: '/reports/employee-statement' },
       ],
     },
   ]
@@ -85,11 +117,11 @@ const handleLogout = async () => {
     <!-- Sidebar -->
     <aside
       :class="[
-        'bg-primary-800 text-white transition-all duration-300',
+        'bg-primary-800 text-white transition-all duration-300 flex flex-col h-screen sticky top-0 z-50',
         sidebarOpen ? 'w-64' : 'w-20'
       ]"
     >
-      <div class="p-4">
+      <div class="p-4 flex-shrink-0">
         <h1 v-if="sidebarOpen" class="text-xl font-bold">نظام ERP المالي</h1>
         <button
           @click="sidebarOpen = !sidebarOpen"
@@ -100,7 +132,7 @@ const handleLogout = async () => {
       </div>
 
       <!-- Navigation Menu -->
-      <nav class="mt-8">
+      <nav class="mt-8 flex-1 overflow-y-auto custom-scrollbar">
         <div v-for="item in menuItems" :key="item.title" class="mb-2">
           <!-- Single Item -->
           <RouterLink
@@ -115,20 +147,28 @@ const handleLogout = async () => {
 
           <!-- Parent with Children -->
           <div v-else>
-            <div class="flex items-center px-4 py-3 font-semibold">
-              <span class="text-2xl ml-3">{{ item.icon }}</span>
-              <span v-if="sidebarOpen">{{ item.title }}</span>
+            <div 
+              class="flex items-center px-4 py-3 font-semibold cursor-pointer hover:bg-primary-700 transition-colors justify-between"
+              @click="toggleMenu(item.title)"
+            >
+              <div class="flex items-center">
+                <span class="text-2xl ml-3">{{ item.icon }}</span>
+                <span v-if="sidebarOpen">{{ item.title }}</span>
+              </div>
+              <span v-if="sidebarOpen" class="text-sm">
+                {{ openMenus.includes(item.title) ? '▼' : '◀' }}
+              </span>
             </div>
-            <div v-if="sidebarOpen && item.children" class="mr-8">
-              <RouterLink
+            <div v-if="sidebarOpen && item.children && openMenus.includes(item.title)" class="pr-6 space-y-1 mt-1 bg-primary-800">
+              <div
                 v-for="child in item.children"
                 :key="child.path"
-                :to="child.path"
-                class="block px-4 py-2 hover:bg-primary-700 rounded transition-colors"
-                active-class="bg-primary-900"
+                @click.stop="handleMenuClick(child.path)"
+                class="block px-4 py-2 hover:bg-primary-700 rounded transition-colors cursor-pointer select-none text-sm"
+                :class="{ 'bg-primary-900': $route.path === child.path, 'font-bold': $route.path === child.path }"
               >
                 {{ child.title }}
-              </RouterLink>
+              </div>
             </div>
           </div>
         </div>
@@ -147,7 +187,7 @@ const handleLogout = async () => {
             <span class="text-sm text-gray-600">
               الصلاحية: 
               <span class="font-semibold">
-                {{ authStore.userRole === 'admin' ? 'مدير' : authStore.userRole === 'finance' ? 'مالي' : 'مراجع' }}
+                {{ authStore.userRole === 'admin' ? 'مدير' : authStore.userRole === 'finance' ? 'مالي' : authStore.userRole === 'hr' ? 'موارد بشرية' : 'مراجع' }}
               </span>
             </span>
             <RouterLink

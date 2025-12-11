@@ -12,6 +12,7 @@ const (
 	RoleAdmin   UserRole = "admin"
 	RoleFinance UserRole = "finance"
 	RoleAuditor UserRole = "auditor"
+	RoleHR      UserRole = "hr"
 )
 
 type User struct {
@@ -486,6 +487,32 @@ type SalaryDeduction struct {
 }
 
 type CreateSalaryDeductionRequest struct {
+	EmployeeID uuid.UUID    `json:"employee_id"`
+	MonthYear  time.Time    `json:"month_year"`
+	Amount     float64      `json:"amount"`
+	Currency   CurrencyCode `json:"currency"`
+	Reason     string       `json:"reason"`
+	ReasonAr   *string      `json:"reason_ar,omitempty"`
+}
+
+// ============================================================================
+// SALARY BONUSES
+// ============================================================================
+
+type SalaryBonus struct {
+	ID         uuid.UUID    `json:"id"`
+	EmployeeID uuid.UUID    `json:"employee_id"`
+	MonthYear  time.Time    `json:"month_year"`
+	Amount     float64      `json:"amount"`
+	Currency   CurrencyCode `json:"currency"`
+	Reason     string       `json:"reason"`
+	ReasonAr   *string      `json:"reason_ar,omitempty"`
+	CreatedAt  time.Time    `json:"created_at"`
+	UpdatedAt  time.Time    `json:"updated_at"`
+	CreatedBy  *uuid.UUID   `json:"created_by,omitempty"`
+}
+
+type CreateSalaryBonusRequest struct {
 	EmployeeID uuid.UUID    `json:"employee_id"`
 	MonthYear  time.Time    `json:"month_year"`
 	Amount     float64      `json:"amount"`
