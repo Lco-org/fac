@@ -208,33 +208,8 @@
                   <label for="is_active" class="mr-2 block text-sm text-gray-900">حساب نشط</label>
                 </div>
 
-                <!-- Granular Permissions -->
-                <div class="border-t border-gray-200 pt-4 mt-4">
-                  <h4 class="text-sm font-medium text-gray-900 mb-3">الصلاحيات التفصيلية</h4>
-                  <div class="space-y-2">
-                    <div v-for="perm in availablePermissions" :key="perm.key" class="flex items-start">
-                      <div class="flex h-5 items-center">
-                        <input
-                          :id="perm.key"
-                          :name="perm.key"
-                          type="checkbox"
-                          :value="perm.key"
-                          v-model="form.permissions"
-                          class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                        />
-                      </div>
-                      <div class="mr-3 text-sm flex items-center">
-                        <label :for="perm.key" class="font-medium text-gray-700 ml-2">{{ perm.label }}</label>
-                        <div class="relative group">
-                            <i class="cursor-help text-gray-400 hover:text-gray-600">ⓘ</i>
-                            <div class="absolute bottom-full mb-2 hidden group-hover:block w-48 p-2 bg-gray-800 text-white text-xs rounded shadow-lg z-10">
-                                {{ perm.description }}
-                            </div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <!-- Granular Permissions (Removed) -->
+                <!-- <div class="border-t border-gray-200 pt-4 mt-4"> ... </div> -->
               </div>
             </div>
           </div>
@@ -285,16 +260,10 @@ const form = ref({
   password: '',
   role: 'finance',
   is_active: true,
-  permissions: []
+  role: 'finance',
+  is_active: true
 })
 
-const availablePermissions = [
-  { key: 'view_dashboard', label: 'عرض لوحة التحكم', description: 'السماح بالوصول للوحة الرئيسية والإحصائيات' },
-  { key: 'view_reports', label: 'عرض التقارير', description: 'السماح بالوصول لصفحة التقارير المالية' },
-  { key: 'view_invoices', label: 'عرض الفواتير', description: 'السماح بالوصول لتقرير الفواتير وعرض تفاصيل الإيصالات' },
-  { key: 'manage_users', label: 'إدارة المستخدمين', description: 'إضافة وتعديل وحذف المستخدمين' },
-  { key: 'manage_members', label: 'إدارة الأعضاء', description: 'إضافة وتعديل وحذف الأعضاء المنتسبين' }
-]
 
 const getInitials = (name) => {
   if (!name) return ''
@@ -322,8 +291,8 @@ const openCreateModal = () => {
     email: '',
     password: '',
     role: 'finance',
-    is_active: true,
-    permissions: []
+    role: 'finance',
+    is_active: true
   }
   isModalOpen.value = true
 }
@@ -338,8 +307,8 @@ const openEditModal = (user) => {
     email: user.email,
     password: '', // Password not shown
     role: user.role,
-    is_active: user.is_active,
-    permissions: user.permissions || []
+    role: user.role,
+    is_active: user.is_active
   }
   isModalOpen.value = true
 }
@@ -351,7 +320,9 @@ const closeModal = () => {
 const saveUser = async () => {
   loading.value = true
   try {
-    if (!form.value.username || !form.value.full_name || !form.value.email || !form.value.password) {
+    // Validation
+    const isNewUser = !form.value.id
+    if (!form.value.username || !form.value.full_name || !form.value.email || (isNewUser && !form.value.password)) {
       alert('يرجى ملء جميع الحقول المطلوبة')
       return
     }
@@ -368,7 +339,7 @@ const saveUser = async () => {
         full_name_ar: form.value.full_name_ar,
         email: form.value.email,
         is_active: form.value.is_active,
-        permissions: form.value.permissions
+        permissions: [] // Force empty permissions
       })
       // Update role separately if changed
       const originalUser = users.value.find(u => u.id === form.value.id)
