@@ -162,3 +162,77 @@ func (h *ReportHandler) GetInvoices(c *fiber.Ctx) error {
 
 	return c.JSON(invoices)
 }
+
+// GetEmployeeStatement returns detailed financial statement for an employee
+func (h *ReportHandler) GetEmployeeStatement(c *fiber.Ctx) error {
+	employeeID := c.Params("id")
+	if employeeID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Employee ID is required",
+		})
+	}
+
+	// Parse optional date filters
+	var startDate, endDate *time.Time
+	if start := c.Query("start_date"); start != "" {
+		t, err := time.Parse("2006-01-02", start)
+		if err == nil {
+			startDate = &t
+		}
+	}
+	if end := c.Query("end_date"); end != "" {
+		t, err := time.Parse("2006-01-02", end)
+		if err == nil {
+			// Set to end of day
+			t = t.Add(24 * time.Hour).Add(-1 * time.Nanosecond)
+			endDate = &t
+		}
+	}
+
+	statement, err := h.reportService.GetEmployeeStatement(c.Context(), employeeID, startDate, endDate)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "Failed to generate employee statement",
+			"details": err.Error(),
+		})
+	}
+
+	return c.JSON(statement)
+}
+
+// GetMemberStatement returns detailed financial statement for a member
+func (h *ReportHandler) GetMemberStatement(c *fiber.Ctx) error {
+	memberID := c.Params("id")
+	if memberID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Member ID is required",
+		})
+	}
+
+	// Parse optional date filters
+	var startDate, endDate *time.Time
+	if start := c.Query("start_date"); start != "" {
+		t, err := time.Parse("2006-01-02", start)
+		if err == nil {
+			startDate = &t
+		}
+	}
+	if end := c.Query("end_date"); end != "" {
+		t, err := time.Parse("2006-01-02", end)
+		if err == nil {
+			// Set to end of day
+			t = t.Add(24 * time.Hour).Add(-1 * time.Nanosecond)
+			endDate = &t
+		}
+	}
+
+	statement, err := h.reportService.GetMemberStatement(c.Context(), memberID, startDate, endDate)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error":   "Failed to generate member statement",
+			"details": err.Error(),
+		})
+	}
+
+	return c.JSON(statement)
+}

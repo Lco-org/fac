@@ -91,3 +91,51 @@ func (h *MemberHandler) DeleteMember(c *fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{"message": "Member deleted successfully"})
 }
+
+// RenewMembership processes a membership renewal/subscription payment
+func (h *MemberHandler) RenewMembership(c *fiber.Ctx) error {
+	var req models.RenewMembershipRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+	}
+
+	if req.MemberID == uuid.Nil || req.Amount <= 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Member ID and amount are required"})
+	}
+
+	userID := middleware.GetUserID(c)
+	subscription, err := h.memberService.RenewMembership(c.Context(), &req, userID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(subscription)
+}
+
+// GetExpiringMembers returns members whose membership expires within 30 days
+func (h *MemberHandler) GetExpiringMembers(c *fiber.Ctx) error {
+	// Default to 30 days threshold
+	daysThreshold := 30
+
+	members, err := h.memberService.GetExpiringMembers(c.Context(), daysThreshold)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch expiring members"})
+	}
+
+	return c.JSON(members)
+}
+
+// GetSubscriptions returns subscription history for a member
+func (h *MemberHandler) GetSubscriptions(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid member ID"})
+	}
+
+	subscriptions, err := h.memberService.GetMemberSubscriptions(c.Context(), id)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch subscriptions"})
+	}
+
+	return c.JSON(subscriptions)
+}

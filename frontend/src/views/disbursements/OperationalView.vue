@@ -16,6 +16,7 @@ const form = ref({
   exchange_rate: 1.0,
   container_id: '',
   project_id: '',
+  employee_id: '',
   description: '',
   description_ar: '',
   payee_payer: '',
@@ -25,6 +26,7 @@ const form = ref({
 
 const containers = ref([])
 const projects = ref([])
+const employees = ref([])
 
 onMounted(async () => {
   try {
@@ -50,10 +52,28 @@ onMounted(async () => {
         name: p.name_ar || p.name
       }))
     }
+
+    // Load employees for optional assignment
+    const employeesRes = await api.get('/employees')
+    if (employeesRes.data && Array.isArray(employeesRes.data)) {
+      employees.value = employeesRes.data.filter(e => e.is_active).map(e => ({
+        id: e.id,
+        name: e.full_name,
+        employee_number: e.employee_number
+      }))
+    }
   } catch (err) {
     console.error('Failed to load data:', err)
   }
 })
+
+// Auto-fill payee when employee selected
+const onEmployeeChange = () => {
+  const selectedEmployee = employees.value.find(e => e.id === form.value.employee_id)
+  if (selectedEmployee) {
+    form.value.payee_payer = selectedEmployee.name
+  }
+}
 
 const handleSubmit = async () => {
   error.value = ''
@@ -63,7 +83,9 @@ const handleSubmit = async () => {
   try {
     const payload = {
       ...form.value,
-      description: form.value.description_ar || form.value.description
+      description: form.value.description_ar || form.value.description,
+      // Only send employee_id if selected (optional for operational)
+      employee_id: form.value.employee_id || null
     }
     const response = await api.post('/transactions', payload)
 
@@ -110,6 +132,7 @@ const resetForm = () => {
     exchange_rate: 1.0,
     container_id: '',
     project_id: '',
+    employee_id: '',
     description: '',
     description_ar: '',
     payee_payer: '',
@@ -176,6 +199,16 @@ const resetForm = () => {
             البيان <span class="text-deficit">*</span>
           </label>
           <textarea v-model="form.description_ar" required rows="3" class="input-field" placeholder="وصف العملية..."></textarea>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">الموظف المسؤول (اختياري)</label>
+          <select v-model="form.employee_id" @change="onEmployeeChange" class="input-field">
+            <option value="">-- بدون موظف --</option>
+            <option v-for="e in employees" :key="e.id" :value="e.id">
+              {{ e.employee_number }} - {{ e.name }}
+            </option>
+          </select>
         </div>
 
         <div>

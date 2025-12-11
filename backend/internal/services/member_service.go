@@ -145,3 +145,105 @@ func (s *MemberService) DeleteMember(ctx context.Context, id uuid.UUID) error {
 
 	return nil
 }
+
+// RenewMembership creates a subscription record and updates member's validity
+func (s *MemberService) RenewMembership(ctx context.Context, req *models.RenewMembershipRequest, createdBy uuid.UUID) (*models.MemberSubscription, error) {
+	now := time.Now()
+	validFrom := now
+	validUntil := now.AddDate(1, 0, 0) // 1 year from now (365 days)
+
+	// Create subscription record
+	var sub models.MemberSubscription
+	err := s.db.QueryRowContext(ctx, `
+		INSERT INTO member_subscriptions (
+			member_id, transaction_id, amount, currency,
+			payment_date, valid_from, valid_until, notes, notes_ar, created_by
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		RETURNING id, member_id, transaction_id, amount, currency,
+		          payment_date, valid_from, valid_until, notes, notes_ar, created_at
+	`, req.MemberID, req.TransactionID, req.Amount, req.Currency,
+		now, validFrom, validUntil, req.Notes, req.NotesAr, createdBy).Scan(
+		&sub.ID, &sub.MemberID, &sub.TransactionID, &sub.Amount, &sub.Currency,
+		&sub.PaymentDate, &sub.ValidFrom, &sub.ValidUntil, &sub.Notes, &sub.NotesAr, &sub.CreatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update member's valid_until and last_renewal_date
+	_, err = s.db.ExecContext(ctx, `
+		UPDATE members 
+		SET valid_until = $1, last_renewal_date = $2, updated_at = CURRENT_TIMESTAMP
+		WHERE id = $3
+	`, validUntil, now, req.MemberID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &sub, nil
+}
+
+// GetExpiringMembers returns members whose membership expires within the specified days
+func (s *MemberService) GetExpiringMembers(ctx context.Context, daysThreshold int) ([]models.ExpiringMember, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT 
+			id, membership_number, full_name, full_name_ar, member_type,
+			email, phone, valid_until,
+			EXTRACT(DAY FROM (valid_until - CURRENT_TIMESTAMP))::INTEGER as days_remaining
+		FROM members
+		WHERE is_active = TRUE
+		  AND valid_until IS NOT NULL
+		  AND valid_until >= CURRENT_TIMESTAMP
+		  AND valid_until < CURRENT_TIMESTAMP + INTERVAL '1 day' * $1
+		ORDER BY valid_until ASC
+	`, daysThreshold)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var members = []models.ExpiringMember{}
+	for rows.Next() {
+		var m models.ExpiringMember
+		err := rows.Scan(
+			&m.ID, &m.MembershipNumber, &m.FullName, &m.FullNameAr, &m.MemberType,
+			&m.Email, &m.Phone, &m.ValidUntil, &m.DaysRemaining,
+		)
+		if err != nil {
+			return nil, err
+		}
+		members = append(members, m)
+	}
+
+	return members, nil
+}
+
+// GetMemberSubscriptions returns all subscriptions for a member
+func (s *MemberService) GetMemberSubscriptions(ctx context.Context, memberID uuid.UUID) ([]models.MemberSubscription, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, member_id, transaction_id, amount, currency,
+		       payment_date, valid_from, valid_until, notes, notes_ar, created_at
+		FROM member_subscriptions
+		WHERE member_id = $1
+		ORDER BY payment_date DESC
+	`, memberID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var subs = []models.MemberSubscription{}
+	for rows.Next() {
+		var sub models.MemberSubscription
+		err := rows.Scan(
+			&sub.ID, &sub.MemberID, &sub.TransactionID, &sub.Amount, &sub.Currency,
+			&sub.PaymentDate, &sub.ValidFrom, &sub.ValidUntil, &sub.Notes, &sub.NotesAr, &sub.CreatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		subs = append(subs, sub)
+	}
+
+	return subs, nil
+}

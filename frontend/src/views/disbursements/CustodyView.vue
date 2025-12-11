@@ -16,6 +16,7 @@ const form = ref({
   exchange_rate: 1.0,
   container_id: '',
   project_id: '',
+  employee_id: '',
   description: '',
   description_ar: '',
   payee_payer: '',
@@ -25,6 +26,7 @@ const form = ref({
 
 const containers = ref([])
 const projects = ref([])
+const employees = ref([])
 
 onMounted(async () => {
   try {
@@ -50,15 +52,40 @@ onMounted(async () => {
         name: p.name_ar || p.name
       }))
     }
+
+    // Load employees for custody assignment
+    const employeesRes = await api.get('/employees')
+    if (employeesRes.data && Array.isArray(employeesRes.data)) {
+      employees.value = employeesRes.data.filter(e => e.is_active).map(e => ({
+        id: e.id,
+        name: e.full_name,
+        employee_number: e.employee_number
+      }))
+    }
   } catch (err) {
     console.error('Failed to load data:', err)
   }
 })
 
+// Auto-fill payee when employee selected
+const onEmployeeChange = () => {
+  const selectedEmployee = employees.value.find(e => e.id === form.value.employee_id)
+  if (selectedEmployee) {
+    form.value.payee_payer = selectedEmployee.name
+  }
+}
+
 const handleSubmit = async () => {
   error.value = ''
   success.value = false
   loading.value = true
+
+  // Validate employee selection
+  if (!form.value.employee_id) {
+    error.value = 'يجب اختيار الموظف المستلم للعهدة'
+    loading.value = false
+    return
+  }
 
   try {
     const payload = {
@@ -110,6 +137,7 @@ const resetForm = () => {
     exchange_rate: 1.0,
     container_id: '',
     project_id: '',
+    employee_id: '',
     description: '',
     description_ar: '',
     payee_payer: '',
@@ -134,6 +162,16 @@ const resetForm = () => {
 
       <form @submit.prevent="handleSubmit" class="space-y-4">
         <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">الموظف المستلم <span class="text-deficit">*</span></label>
+          <select v-model="form.employee_id" @change="onEmployeeChange" required class="input-field">
+            <option value="">اختر الموظف...</option>
+            <option v-for="e in employees" :key="e.id" :value="e.id">
+              {{ e.employee_number }} - {{ e.name }}
+            </option>
+          </select>
+        </div>
+
+        <div>
           <label class="block text-sm font-medium text-gray-700 mb-2">المبلغ <span class="text-deficit">*</span></label>
           <input v-model.number="form.amount" type="number" step="0.01" required class="input-field" />
         </div>
@@ -143,10 +181,10 @@ const resetForm = () => {
           <select v-model="form.container_id" required class="input-field">
             <option value="">اختر...</option>
             <optgroup label="نقدي">
-              <option v-for="c in containers.filter(x => x.type === 'cash')" :key="c.id" :value="c.id">{{ c.name }}</option>
+              <option v-for="c in containers.filter(x => x.type === 'cash')" :key="c.id" :value="c.id">{{ c.name }} ({{ c.currency }})</option>
             </optgroup>
-            <optgroup label="بنك">
-              <option v-for="c in containers.filter(x => x.type === 'bank')" :key="c.id" :value="c.id">{{ c.name }}</option>
+            <optgroup label="🏦 مصرفي (بنك)">
+              <option v-for="c in containers.filter(x => x.type === 'bank')" :key="c.id" :value="c.id">{{ c.name }} ({{ c.currency }})</option>
             </optgroup>
           </select>
         </div>

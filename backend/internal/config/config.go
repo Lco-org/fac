@@ -94,7 +94,7 @@ func Load() *Config {
 			Port:     getEnv("DB_PORT", "5432"),
 			User:     getEnv("DB_USER", "postgres"),
 			Password: getEnv("DB_PASSWORD", ""),
-			DBName:   getEnv("DB_NAME", "cso_erp"),
+			DBName:   getEnv("DB_NAME", "cso-erp"),
 			SSLMode:  getEnv("DB_SSLMODE", "disable"),
 		},
 		JWT: JWTConfig{

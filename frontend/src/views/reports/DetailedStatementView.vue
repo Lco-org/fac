@@ -14,7 +14,7 @@
         <!-- Type Selection -->
         <div class="mb-6">
           <label class="block text-sm font-semibold text-gray-700 mb-3">نوع الكشف</label>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <button @click="statementType = 'container'" :class="[statementType === 'container' ? 'bg-primary-50 border-primary-500 ring-2 ring-primary-500' : 'bg-white border-gray-300 hover:border-primary-300', 'relative rounded-lg border-2 p-5 flex items-center transition-all']">
               <div class="flex-shrink-0 text-4xl ml-4">🏦</div>
               <div class="flex-1 text-right">
@@ -30,13 +30,21 @@
                 <span class="block text-sm text-gray-600 mt-1">المشاريع والبرامج التنموية</span>
               </div>
             </button>
+
+            <button @click="statementType = 'employee'" :class="[statementType === 'employee' ? 'bg-primary-50 border-primary-500 ring-2 ring-primary-500' : 'bg-white border-gray-300 hover:border-primary-300', 'relative rounded-lg border-2 p-5 flex items-center transition-all']">
+              <div class="flex-shrink-0 text-4xl ml-4">👤</div>
+              <div class="flex-1 text-right">
+                <span class="block text-lg font-bold text-gray-900">كشف حساب موظف</span>
+                <span class="block text-sm text-gray-600 mt-1">الرواتب والعُهد والخصومات</span>
+              </div>
+            </button>
           </div>
         </div>
 
-        <!-- Container/Project Selection -->
+        <!-- Container/Project/Employee Selection -->
         <div class="mb-6">
           <label class="block text-sm font-semibold text-gray-700 mb-3">
-            {{ statementType === 'container' ? 'اختر الحساب المالي' : 'اختر المشروع' }}
+            {{ statementType === 'container' ? 'اختر الحساب المالي' : statementType === 'project' ? 'اختر المشروع' : 'اختر الموظف' }}
           </label>
           
           <select v-if="statementType === 'container'" v-model="selectedContainer" class="block w-full text-lg rounded-lg border-2 border-gray-300 focus:border-primary-500 focus:ring-2 focus:ring-primary-500 py-3 px-4">
@@ -50,6 +58,13 @@
             <option value="">-- اختر المشروع --</option>
             <option v-for="project in projects" :key="project.id" :value="project.id">
               {{ project.code }} • {{ project.name }}
+            </option>
+          </select>
+
+          <select v-if="statementType === 'employee'" v-model="selectedEmployee" class="block w-full text-lg rounded-lg border-2 border-gray-300 focus:border-primary-500 focus:ring-2 focus:ring-primary-500 py-3 px-4">
+            <option value="">-- اختر الموظف --</option>
+            <option v-for="emp in employees" :key="emp.id" :value="emp.id">
+              {{ emp.employee_number }} • {{ emp.full_name }} {{ emp.position ? '• ' + emp.position : '' }}
             </option>
           </select>
         </div>
@@ -72,7 +87,7 @@
         <!-- Generate Button -->
         <button @click="generateStatement" :disabled="!canGenerate" class="w-full bg-primary-600 hover:bg-primary-700 disabled:bg-gray-400 text-white font-bold py-4 px-6 rounded-lg text-lg shadow-lg transition-all disabled:cursor-not-allowed">
           <span v-if="canGenerate">📄 عرض الكشف التفصيلي</span>
-          <span v-else>يرجى اختيار {{ statementType === 'container' ? 'الحساب' : 'المشروع' }}</span>
+          <span v-else>يرجى اختيار {{ statementType === 'container' ? 'الحساب' : statementType === 'project' ? 'المشروع' : 'الموظف' }}</span>
         </button>
       </div>
 
@@ -84,7 +99,7 @@
             <div class="text-sm mb-2 print:text-black">منظمات المجتمع المدني</div>
             <h1 class="text-3xl font-bold mb-2">نظام الإدارة المالية المتكامل</h1>
             <div class="text-xl font-semibold mt-4 print:text-black">
-              {{ statementType === 'container' ? '📋 كشف حساب مالي تفصيلي' : '📊 كشف حساب مشروع تفصيلي' }}
+              {{ statementType === 'container' ? '📋 كشف حساب مالي تفصيلي' : statementType === 'project' ? '📊 كشف حساب مشروع تفصيلي' : '👤 كشف حساب موظف تفصيلي' }}
             </div>
             <div class="text-sm mt-3 print:text-gray-700">
               تاريخ الإصدار: {{ formatDate(statement.generated_at) }} • {{ formatTime(statement.generated_at) }}
@@ -92,9 +107,9 @@
           </div>
         </div>
 
-        <!-- Account/Project Info -->
+        <!-- Account/Project/Employee Info -->
         <div class="p-4 bg-gray-50 print:bg-white border-b border-gray-200 print:border-black">
-          <h3 class="text-base font-bold text-gray-900 mb-2">بيانات {{ statementType === 'container' ? 'الحساب' : 'المشروع' }}</h3>
+          <h3 class="text-base font-bold text-gray-900 mb-2">بيانات {{ statementType === 'container' ? 'الحساب' : statementType === 'project' ? 'المشروع' : 'الموظف' }}</h3>
           
           <!-- Consolidated Single Box -->
           <div class="bg-white p-3 rounded-md border border-gray-300 print:border-gray-400">
@@ -141,6 +156,29 @@
                 <div class="text-sm font-bold text-gray-900">{{ formatNumber(statement.project.budget) }} {{ statement.project.currency }}</div>
               </div>
             </div>
+
+            <div v-if="statementType === 'employee'" class="grid grid-cols-1 md:grid-cols-3 gap-y-2 gap-x-4">
+              <div>
+                <div class="text-xs text-gray-500 mb-0.5 font-medium">رقم الموظف</div>
+                <div class="text-sm font-bold text-gray-900 font-mono">{{ statement.employee?.employee_number }}</div>
+              </div>
+              <div class="col-span-2">
+                <div class="text-xs text-gray-500 mb-0.5 font-medium">اسم الموظف</div>
+                <div class="text-sm font-bold text-gray-900">{{ statement.employee?.full_name }}</div>
+              </div>
+              <div v-if="statement.employee?.position">
+                <div class="text-xs text-gray-500 mb-0.5 font-medium">المنصب</div>
+                <div class="text-sm font-bold text-gray-900">{{ statement.employee.position }}</div>
+              </div>
+              <div v-if="statement.employee?.department">
+                <div class="text-xs text-gray-500 mb-0.5 font-medium">القسم</div>
+                <div class="text-sm font-bold text-gray-900">{{ statement.employee.department }}</div>
+              </div>
+              <div v-if="statement.employee?.base_salary">
+                <div class="text-xs text-gray-500 mb-0.5 font-medium">الراتب الأساسي</div>
+                <div class="text-sm font-bold text-green-600">{{ formatNumber(statement.employee.base_salary) }} {{ statement.employee.salary_currency || 'LYD' }}</div>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -153,26 +191,26 @@
               <div class="text-lg font-bold text-blue-600">{{ formatNumber(statement.summary.opening_balance) }}</div>
             </div>
             <div class="bg-white p-2 rounded-lg shadow-sm border-r-4 border-green-500 print:border-2 print:border-gray-400">
-              <div class="text-[10px] text-gray-600 mb-0.5">{{ statementType === 'container' ? 'إجمالي المقبوضات' : 'إجمالي الإيرادات' }}</div>
-              <div class="text-lg font-bold text-green-600">{{ formatNumber(statement.summary.total_income) }}</div>
+              <div class="text-[10px] text-gray-600 mb-0.5">{{ statementType === 'container' ? 'إجمالي المقبوضات' : statementType === 'project' ? 'إجمالي الإيرادات' : 'إجمالي المقبوضات (رواتب + عُهد)' }}</div>
+              <div class="text-lg font-bold text-green-600">{{ formatNumber(statement.summary.total_income || statement.summary.total_salaries || 0) }}</div>
             </div>
             <div class="bg-white p-2 rounded-lg shadow-sm border-r-4 border-red-500 print:border-2 print:border-gray-400">
-              <div class="text-[10px] text-gray-600 mb-0.5">{{ statementType === 'container' ? 'إجمالي المدفوعات' : 'إجمالي المصروفات' }}</div>
-              <div class="text-lg font-bold text-red-600">{{ formatNumber(statement.summary.total_expenses) }}</div>
+              <div class="text-[10px] text-gray-600 mb-0.5">{{ statementType === 'container' ? 'إجمالي المدفوعات' : statementType === 'project' ? 'إجمالي المصروفات' : 'إجمالي الخصومات' }}</div>
+              <div class="text-lg font-bold text-red-600">{{ formatNumber(statement.summary.total_expenses || statement.summary.total_deductions || 0) }}</div>
             </div>
             <div class="bg-white p-2 rounded-lg shadow-sm border-r-4 border-primary-500 print:border-2 print:border-gray-400">
-              <div class="text-[10px] text-gray-600 mb-0.5">{{ statementType === 'container' ? 'الرصيد الختامي' : 'صافي المركز' }}</div>
-              <div class="text-lg font-bold text-primary-600">{{ formatNumber(statementType === 'container' ? statement.summary.closing_balance : statement.summary.net_position) }}</div>
+              <div class="text-[10px] text-gray-600 mb-0.5">{{ statementType === 'container' ? 'الرصيد الختامي' : statementType === 'project' ? 'صافي المركز' : 'صافي المستحقات' }}</div>
+              <div class="text-lg font-bold text-primary-600">{{ formatNumber(statementType === 'container' ? statement.summary.closing_balance : statement.summary.net_position || statement.summary.net_amount || 0) }}</div>
             </div>
           </div>
           <div class="mt-2 text-xs text-gray-500">
-            <span>عدد الحركات: {{ statement.summary.transaction_count }}</span>
+            <span>عدد الحركات: {{ statement.summary.transaction_count || (statement.transactions?.length || 0) }}</span>
           </div>
         </div>
 
         <!-- Transactions Table -->
         <div class="p-8">
-          <h3 class="text-xl font-bold text-gray-900 mb-6">📝 تفاصيل الحركات المالية</h3>
+          <h3 class="text-xl font-bold text-gray-900 mb-6">📝 {{ statementType === 'employee' ? 'تفاصيل الرواتب والعُهد' : 'تفاصيل الحركات المالية' }}</h3>
           <div class="overflow-x-auto border-2 border-gray-200 rounded-lg print:border-black">
             <table class="min-w-full divide-y-2 divide-gray-200 print:divide-black responsive-table">
               <thead class="bg-gray-800 text-white print:bg-gray-200 print:text-black">
@@ -182,18 +220,20 @@
                   <th class="px-4 py-4 text-right text-sm font-bold">البيان</th>
                   <th v-if="statementType === 'container'" class="px-4 py-4 text-right text-sm font-bold">المشروع</th>
                   <th v-if="statementType === 'project'" class="px-4 py-4 text-right text-sm font-bold">الحساب</th>
-                  <th class="px-4 py-4 text-center text-sm font-bold bg-green-700 print:bg-gray-300">مدين (إضافة)</th>
-                  <th class="px-4 py-4 text-center text-sm font-bold bg-red-700 print:bg-gray-300">دائن (خصم)</th>
+                  <th v-if="statementType === 'employee'" class="px-4 py-4 text-right text-sm font-bold">المشروع</th>
+                  <th class="px-4 py-4 text-center text-sm font-bold bg-green-700 print:bg-gray-300">{{ statementType === 'employee' ? 'مستحق (راتب/عهدة)' : 'مدين (إضافة)' }}</th>
+                  <th class="px-4 py-4 text-center text-sm font-bold bg-red-700 print:bg-gray-300">{{ statementType === 'employee' ? 'خصم' : 'دائن (خصم)' }}</th>
                   <th v-if="statementType === 'container'" class="px-4 py-4 text-center text-sm font-bold bg-blue-700 print:bg-gray-300">الرصيد</th>
                 </tr>
               </thead>
               <tbody class="bg-white divide-y divide-gray-200 print:divide-gray-400">
-                <tr v-for="(transaction, index) in statement.transactions" :key="transaction.id" :class="index % 2 === 0 ? 'bg-white' : 'bg-gray-50'">
+                <tr v-for="(transaction, index) in statement.transactions" :key="transaction.id || index" :class="index % 2 === 0 ? 'bg-white' : 'bg-gray-50'">
                   <td class="px-4 py-3 whitespace-nowrap text-sm font-medium" data-label="التاريخ">{{ formatDate(transaction.transaction_date) }}</td>
                   <td class="px-4 py-3 whitespace-nowrap text-sm font-mono text-primary-600 font-bold" data-label="رقم المستند">
-                    <a :href="`/receipt/${transaction.id}`" target="_blank" class="hover:underline hover:text-primary-800">
+                    <a v-if="transaction.id" :href="`/receipt/${transaction.id}`" target="_blank" class="hover:underline hover:text-primary-800">
                         {{ transaction.transaction_number }}
                     </a>
+                    <span v-else>{{ transaction.transaction_number }}</span>
                   </td>
                   <td class="px-4 py-3 text-sm" data-label="البيان">
                     <div class="font-semibold">{{ getTransactionTypeName(transaction.type) }}</div>
@@ -202,6 +242,7 @@
                   </td>
                   <td v-if="statementType === 'container'" class="px-4 py-3 text-sm font-medium" data-label="المشروع">{{ transaction.project_name }}</td>
                   <td v-if="statementType === 'project'" class="px-4 py-3 text-sm" data-label="الحساب">{{ transaction.container_name }}</td>
+                  <td v-if="statementType === 'employee'" class="px-4 py-3 text-sm font-medium" data-label="المشروع">{{ transaction.project_name || '-' }}</td>
                   <td class="px-4 py-3 text-center" data-label="مدين (إضافة)">
                     <span v-if="isCredit(transaction)" class="text-lg font-bold text-green-600">{{ formatNumber(transaction.amount) }}</span>
                     <span v-else class="text-gray-300">-</span>
@@ -270,15 +311,18 @@ import api from '@/api'
 const statementType = ref('container')
 const selectedContainer = ref('')
 const selectedProject = ref('')
+const selectedEmployee = ref('')
 const startDate = ref('')
 const endDate = ref('')
 const statement = ref(null)
 const containers = ref([])
 const projects = ref([])
+const employees = ref([])
 
 const canGenerate = computed(() => {
   if (statementType.value === 'container') return selectedContainer.value !== ''
-  else return selectedProject.value !== ''
+  else if (statementType.value === 'project') return selectedProject.value !== ''
+  else return selectedEmployee.value !== ''
 })
 
 const fetchContainers = async () => {
@@ -299,11 +343,25 @@ const fetchProjects = async () => {
   }
 }
 
+const fetchEmployees = async () => {
+  try {
+    const response = await api.get('/employees')
+    employees.value = response.data.filter(e => e.is_active)
+  } catch (error) {
+    console.error('Failed to fetch employees:', error)
+  }
+}
+
 const generateStatement = async () => {
   try {
-    let url = statementType.value === 'container' 
-      ? `/reports/containers/${selectedContainer.value}/statement`
-      : `/reports/projects/${selectedProject.value}/statement`
+    let url
+    if (statementType.value === 'container') {
+      url = `/reports/containers/${selectedContainer.value}/statement`
+    } else if (statementType.value === 'project') {
+      url = `/reports/projects/${selectedProject.value}/statement`
+    } else {
+      url = `/reports/employees/${selectedEmployee.value}/statement`
+    }
 
     const params = new URLSearchParams()
     if (startDate.value) params.append('start_date', startDate.value)
@@ -368,6 +426,7 @@ const isCredit = (transaction) => {
 onMounted(() => {
   fetchContainers()
   fetchProjects()
+  fetchEmployees()
 })
 </script>
 

@@ -61,6 +61,38 @@ func (s *TransactionService) CreateTransaction(ctx context.Context, req *models.
 			return ErrProjectNotFound
 		}
 
+		// Validate employee_id requirement for salary and custody transactions
+		if req.Type == models.TransactionDisbursementSalary || req.Type == models.TransactionDisbursementCustody {
+			if req.EmployeeID == nil {
+				return errors.New("employee_id is required for salary and custody transactions")
+			}
+			// Verify employee exists
+			var employeeExists bool
+			err = tx.QueryRowContext(ctx, `
+				SELECT EXISTS(SELECT 1 FROM employees WHERE id = $1 AND is_active = TRUE)
+			`, *req.EmployeeID).Scan(&employeeExists)
+			if err != nil {
+				return fmt.Errorf("failed to verify employee: %w", err)
+			}
+			if !employeeExists {
+				return ErrEmployeeNotFound
+			}
+		}
+
+		// Validate member_id if provided
+		if req.MemberID != nil {
+			var memberExists bool
+			err = tx.QueryRowContext(ctx, `
+				SELECT EXISTS(SELECT 1 FROM members WHERE id = $1 AND is_active = TRUE)
+			`, *req.MemberID).Scan(&memberExists)
+			if err != nil {
+				return fmt.Errorf("failed to verify member: %w", err)
+			}
+			if !memberExists {
+				return ErrMemberNotFound
+			}
+		}
+
 		balanceBefore := container.Balance
 		var balanceAfter float64
 		isIncome := req.Type == models.TransactionIncomeGrant || req.Type == models.TransactionIncomeDonation
@@ -100,19 +132,20 @@ func (s *TransactionService) CreateTransaction(ctx context.Context, req *models.
 		err = tx.QueryRowContext(ctx, `
 			INSERT INTO transactions (
 				type, status, amount, currency, exchange_rate, amount_local,
-				container_id, project_id, description, description_ar,
+				container_id, project_id, employee_id, member_id, description, description_ar,
 				payee_payer, payee_payer_ar, reference_number,
 				is_deficit, deficit_approved_by, deficit_warning_shown,
 				balance_before, balance_after, transaction_date, created_by
 			) VALUES (
 				$1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-				$11, $12, $13, $14, $15, $16, $17, $18, $19, $20
+				$11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
 			) RETURNING id, transaction_number, created_at
 		`,
 			req.Type, models.TransactionCompleted, req.Amount, req.Currency,
 			req.ExchangeRate, amountLocal, req.ContainerID, req.ProjectID,
-			req.Description, req.DescriptionAr, req.PayeePayer, req.PayeePayerAr,
-			req.ReferenceNumber, isDeficit, userID, deficitWarning,
+			req.EmployeeID, req.MemberID, req.Description, req.DescriptionAr,
+			req.PayeePayer, req.PayeePayerAr, req.ReferenceNumber,
+			isDeficit, userID, deficitWarning,
 			balanceBefore, balanceAfter, transactionDate, userID,
 		).Scan(&transaction.ID, &transaction.TransactionNumber, &transaction.CreatedAt)
 

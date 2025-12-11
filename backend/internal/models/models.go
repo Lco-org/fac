@@ -81,6 +81,10 @@ type Project struct {
 	Budget      *float64     `json:"budget,omitempty"`
 	Currency    CurrencyCode `json:"currency"`
 	IsActive    bool         `json:"is_active"`
+	IsLocked    bool         `json:"is_locked"`
+	LockedAt    *time.Time   `json:"locked_at,omitempty"`
+	LockReason  *string      `json:"lock_reason,omitempty"`
+	LockedBy    *uuid.UUID   `json:"locked_by,omitempty"`
 	CreatedAt   time.Time    `json:"created_at"`
 	UpdatedAt   time.Time    `json:"updated_at"`
 	CreatedBy   *uuid.UUID   `json:"created_by,omitempty"`
@@ -119,6 +123,8 @@ type Transaction struct {
 	AmountLocal           float64           `json:"amount_local"`
 	ContainerID           uuid.UUID         `json:"container_id"`
 	ProjectID             uuid.UUID         `json:"project_id"`
+	EmployeeID            *uuid.UUID        `json:"employee_id,omitempty"`
+	MemberID              *uuid.UUID        `json:"member_id,omitempty"`
 	Description           string            `json:"description"`
 	DescriptionAr         *string           `json:"description_ar,omitempty"`
 	PayeePayer            *string           `json:"payee_payer,omitempty"`
@@ -175,6 +181,8 @@ type CreateTransactionRequest struct {
 	ExchangeRate    float64         `json:"exchange_rate"`
 	ContainerID     uuid.UUID       `json:"container_id"`
 	ProjectID       uuid.UUID       `json:"project_id"`
+	EmployeeID      *uuid.UUID      `json:"employee_id,omitempty"`
+	MemberID        *uuid.UUID      `json:"member_id,omitempty"`
 	Description     string          `json:"description"`
 	DescriptionAr   *string         `json:"description_ar,omitempty"`
 	PayeePayer      *string         `json:"payee_payer,omitempty"`
@@ -318,40 +326,50 @@ type ProjectTransactionDetail struct {
 }
 
 type Employee struct {
-	ID             uuid.UUID  `json:"id"`
-	EmployeeNumber string     `json:"employee_number"`
-	FullName       string     `json:"full_name"`
-	FullNameAr     *string    `json:"full_name_ar,omitempty"`
-	Position       *string    `json:"position,omitempty"`
-	PositionAr     *string    `json:"position_ar,omitempty"`
-	Department     *string    `json:"department,omitempty"`
-	DepartmentAr   *string    `json:"department_ar,omitempty"`
-	Phone          *string    `json:"phone,omitempty"`
-	Email          *string    `json:"email,omitempty"`
-	Salary         *float64   `json:"salary,omitempty"`
-	JoinDate       *time.Time `json:"join_date,omitempty"`
-	IsActive       bool       `json:"is_active"`
-	CreatedAt      time.Time  `json:"created_at"`
-	UpdatedAt      time.Time  `json:"updated_at"`
-	CreatedBy      *uuid.UUID `json:"created_by,omitempty"`
+	ID             uuid.UUID    `json:"id"`
+	EmployeeNumber string       `json:"employee_number"`
+	FullName       string       `json:"full_name"`
+	FullNameAr     *string      `json:"full_name_ar,omitempty"`
+	Position       *string      `json:"position,omitempty"`
+	PositionAr     *string      `json:"position_ar,omitempty"`
+	Department     *string      `json:"department,omitempty"`
+	DepartmentAr   *string      `json:"department_ar,omitempty"`
+	Phone          *string      `json:"phone,omitempty"`
+	Email          *string      `json:"email,omitempty"`
+	Salary         *float64     `json:"salary,omitempty"`
+	BaseSalary     float64      `json:"base_salary"`
+	MonthlyBudget  float64      `json:"monthly_budget"`
+	SalaryCurrency CurrencyCode `json:"salary_currency"`
+	JoinDate       *time.Time   `json:"join_date,omitempty"`
+	IsActive       bool         `json:"is_active"`
+	CreatedAt      time.Time    `json:"created_at"`
+	UpdatedAt      time.Time    `json:"updated_at"`
+	CreatedBy      *uuid.UUID   `json:"created_by,omitempty"`
 }
 
 type Member struct {
-	ID               uuid.UUID  `json:"id"`
-	MembershipNumber string     `json:"membership_number"`
-	FullName         string     `json:"full_name"`
-	FullNameAr       *string    `json:"full_name_ar,omitempty"`
-	MemberType       string     `json:"member_type"`
-	Phone            *string    `json:"phone,omitempty"`
-	Email            *string    `json:"email,omitempty"`
-	Address          *string    `json:"address,omitempty"`
-	AddressAr        *string    `json:"address_ar,omitempty"`
-	JoinDate         *time.Time `json:"join_date,omitempty"`
-	Status           string     `json:"status"`
-	IsActive         bool       `json:"is_active"`
-	CreatedAt        time.Time  `json:"created_at"`
-	UpdatedAt        time.Time  `json:"updated_at"`
-	CreatedBy        *uuid.UUID `json:"created_by,omitempty"`
+	ID                   uuid.UUID    `json:"id"`
+	MembershipNumber     string       `json:"membership_number"`
+	FullName             string       `json:"full_name"`
+	FullNameAr           *string      `json:"full_name_ar,omitempty"`
+	MemberType           string       `json:"member_type"`
+	Phone                *string      `json:"phone,omitempty"`
+	Email                *string      `json:"email,omitempty"`
+	Address              *string      `json:"address,omitempty"`
+	AddressAr            *string      `json:"address_ar,omitempty"`
+	JoinDate             *time.Time   `json:"join_date,omitempty"`
+	Status               string       `json:"status"`
+	ValidUntil           *time.Time   `json:"valid_until,omitempty"`
+	LastRenewalDate      *time.Time   `json:"last_renewal_date,omitempty"`
+	SubscriptionAmount   float64      `json:"subscription_amount"`
+	SubscriptionCurrency CurrencyCode `json:"subscription_currency"`
+	ComputedStatus       string       `json:"computed_status,omitempty"`
+	ExpiringSoon         bool         `json:"expiring_soon"`
+	DaysRemaining        int          `json:"days_remaining,omitempty"`
+	IsActive             bool         `json:"is_active"`
+	CreatedAt            time.Time    `json:"created_at"`
+	UpdatedAt            time.Time    `json:"updated_at"`
+	CreatedBy            *uuid.UUID   `json:"created_by,omitempty"`
 }
 
 type CreateEmployeeRequest struct {
@@ -431,6 +449,8 @@ type UpdateProjectRequest struct {
 	Budget      *float64      `json:"budget,omitempty"`
 	Currency    *CurrencyCode `json:"currency,omitempty"`
 	IsActive    *bool         `json:"is_active,omitempty"`
+	IsLocked    *bool         `json:"is_locked,omitempty"`
+	LockReason  *string       `json:"lock_reason,omitempty"`
 }
 
 type CreateTransferRequest struct {
@@ -448,4 +468,155 @@ type TransferResponse struct {
 	Message           string      `json:"message"`
 	DebitTransaction  Transaction `json:"debit_transaction"`
 	CreditTransaction Transaction `json:"credit_transaction"`
+}
+
+// ============================================================================
+// SALARY DEDUCTIONS
+// ============================================================================
+
+type SalaryDeduction struct {
+	ID         uuid.UUID    `json:"id"`
+	EmployeeID uuid.UUID    `json:"employee_id"`
+	MonthYear  time.Time    `json:"month_year"`
+	Amount     float64      `json:"amount"`
+	Currency   CurrencyCode `json:"currency"`
+	Reason     string       `json:"reason"`
+	ReasonAr   *string      `json:"reason_ar,omitempty"`
+	CreatedAt  time.Time    `json:"created_at"`
+	UpdatedAt  time.Time    `json:"updated_at"`
+	CreatedBy  *uuid.UUID   `json:"created_by,omitempty"`
+}
+
+type CreateSalaryDeductionRequest struct {
+	EmployeeID uuid.UUID    `json:"employee_id"`
+	MonthYear  time.Time    `json:"month_year"`
+	Amount     float64      `json:"amount"`
+	Currency   CurrencyCode `json:"currency"`
+	Reason     string       `json:"reason"`
+	ReasonAr   *string      `json:"reason_ar,omitempty"`
+}
+
+// ============================================================================
+// MEMBER SUBSCRIPTIONS
+// ============================================================================
+
+type MemberSubscription struct {
+	ID            uuid.UUID    `json:"id"`
+	MemberID      uuid.UUID    `json:"member_id"`
+	TransactionID *uuid.UUID   `json:"transaction_id,omitempty"`
+	Amount        float64      `json:"amount"`
+	Currency      CurrencyCode `json:"currency"`
+	PaymentDate   time.Time    `json:"payment_date"`
+	ValidFrom     time.Time    `json:"valid_from"`
+	ValidUntil    time.Time    `json:"valid_until"`
+	Notes         *string      `json:"notes,omitempty"`
+	NotesAr       *string      `json:"notes_ar,omitempty"`
+	CreatedAt     time.Time    `json:"created_at"`
+	UpdatedAt     time.Time    `json:"updated_at"`
+	CreatedBy     *uuid.UUID   `json:"created_by,omitempty"`
+}
+
+type CreateMemberSubscriptionRequest struct {
+	MemberID      uuid.UUID    `json:"member_id"`
+	TransactionID *uuid.UUID   `json:"transaction_id,omitempty"`
+	Amount        float64      `json:"amount"`
+	Currency      CurrencyCode `json:"currency"`
+	Notes         *string      `json:"notes,omitempty"`
+	NotesAr       *string      `json:"notes_ar,omitempty"`
+}
+
+type RenewMembershipRequest struct {
+	MemberID      uuid.UUID    `json:"member_id"`
+	Amount        float64      `json:"amount"`
+	Currency      CurrencyCode `json:"currency"`
+	TransactionID *uuid.UUID   `json:"transaction_id,omitempty"`
+	Notes         *string      `json:"notes,omitempty"`
+	NotesAr       *string      `json:"notes_ar,omitempty"`
+}
+
+// ============================================================================
+// EMPLOYEE STATEMENT
+// ============================================================================
+
+type EmployeeStatement struct {
+	Employee     Employee                    `json:"employee"`
+	Transactions []EmployeeTransactionDetail `json:"transactions"`
+	Deductions   []SalaryDeduction           `json:"deductions"`
+	Summary      EmployeeStatementSummary    `json:"summary"`
+	GeneratedAt  time.Time                   `json:"generated_at"`
+}
+
+type EmployeeTransactionDetail struct {
+	ID                uuid.UUID       `json:"id"`
+	TransactionNumber string          `json:"transaction_number"`
+	Type              TransactionType `json:"type"`
+	Amount            float64         `json:"amount"`
+	Currency          CurrencyCode    `json:"currency"`
+	Description       string          `json:"description"`
+	DescriptionAr     *string         `json:"description_ar,omitempty"`
+	ProjectCode       string          `json:"project_code"`
+	ProjectName       string          `json:"project_name"`
+	ContainerName     string          `json:"container_name"`
+	ContainerType     ContainerType   `json:"container_type"`
+	TransactionDate   time.Time       `json:"transaction_date"`
+	CreatedAt         time.Time       `json:"created_at"`
+}
+
+type EmployeeStatementSummary struct {
+	TotalSalary      float64 `json:"total_salary"`
+	TotalCustody     float64 `json:"total_custody"`
+	TotalBonus       float64 `json:"total_bonus"`
+	TotalDeductions  float64 `json:"total_deductions"`
+	NetPayments      float64 `json:"net_payments"`
+	TransactionCount int     `json:"transaction_count"`
+}
+
+// ============================================================================
+// MEMBER STATEMENT
+// ============================================================================
+
+type MemberStatement struct {
+	Member        Member                    `json:"member"`
+	Subscriptions []MemberSubscription      `json:"subscriptions"`
+	Transactions  []MemberTransactionDetail `json:"transactions"`
+	Summary       MemberStatementSummary    `json:"summary"`
+	GeneratedAt   time.Time                 `json:"generated_at"`
+}
+
+type MemberTransactionDetail struct {
+	ID                uuid.UUID       `json:"id"`
+	TransactionNumber string          `json:"transaction_number"`
+	Type              TransactionType `json:"type"`
+	Amount            float64         `json:"amount"`
+	Currency          CurrencyCode    `json:"currency"`
+	Description       string          `json:"description"`
+	DescriptionAr     *string         `json:"description_ar,omitempty"`
+	ProjectCode       string          `json:"project_code"`
+	ProjectName       string          `json:"project_name"`
+	ContainerName     string          `json:"container_name"`
+	TransactionDate   time.Time       `json:"transaction_date"`
+	CreatedAt         time.Time       `json:"created_at"`
+}
+
+type MemberStatementSummary struct {
+	TotalDeposits     float64 `json:"total_deposits"`
+	SubscriptionsPaid int     `json:"subscriptions_paid"`
+	MembershipYears   int     `json:"membership_years"`
+	TransactionCount  int     `json:"transaction_count"`
+}
+
+// ============================================================================
+// EXPIRING MEMBERSHIPS (for dashboard widget)
+// ============================================================================
+
+type ExpiringMember struct {
+	ID               uuid.UUID `json:"id"`
+	MembershipNumber string    `json:"membership_number"`
+	FullName         string    `json:"full_name"`
+	FullNameAr       *string   `json:"full_name_ar,omitempty"`
+	MemberType       string    `json:"member_type"`
+	Email            *string   `json:"email,omitempty"`
+	Phone            *string   `json:"phone,omitempty"`
+	ValidUntil       time.Time `json:"valid_until"`
+	DaysRemaining    int       `json:"days_remaining"`
 }

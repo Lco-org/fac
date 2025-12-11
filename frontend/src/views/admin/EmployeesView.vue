@@ -29,6 +29,9 @@
                 <span v-if="employee.department" class="mx-2">•</span>
                 <span v-if="employee.department">{{ employee.department }}</span>
               </div>
+              <div v-if="employee.base_salary > 0" class="mt-1 text-sm text-green-600 font-medium">
+                الراتب: {{ formatCurrency(employee.base_salary) }} {{ employee.salary_currency || 'LYD' }}
+              </div>
             </div>
             <div class="flex items-center space-x-2 space-x-reverse">
               <button @click="openEditModal(employee)" class="p-2 text-gray-400 hover:text-gray-500">
@@ -65,15 +68,31 @@
                   </div>
                   <div>
                     <label class="block text-sm font-medium text-gray-700">الاسم الكامل</label>
-                    <input type="text" v-model="form.full_name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm" />
+                    <input type="text" v-model="form.full_name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm" placeholder="بالإنجليزية" />
                   </div>
                   <div>
-                    <label class="block text-sm font-medium text-gray-700">المنصب</label>
-                    <input type="text" v-model="form.position" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm" />
+                    <label class="block text-sm font-medium text-gray-700">الاسم الكامل (عربي)</label>
+                    <input type="text" v-model="form.full_name_ar" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm" placeholder="بالعربية" />
                   </div>
-                  <div>
-                    <label class="block text-sm font-medium text-gray-700">القسم</label>
-                    <input type="text" v-model="form.department" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm" />
+                  <div class="grid grid-cols-2 gap-4">
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700">المنصب</label>
+                      <input type="text" v-model="form.position" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm" placeholder="بالإنجليزية" />
+                    </div>
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700">المنصب (عربي)</label>
+                      <input type="text" v-model="form.position_ar" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm" placeholder="بالعربية" />
+                    </div>
+                  </div>
+                  <div class="grid grid-cols-2 gap-4">
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700">القسم</label>
+                      <input type="text" v-model="form.department" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm" placeholder="بالإنجليزية" />
+                    </div>
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700">القسم (عربي)</label>
+                      <input type="text" v-model="form.department_ar" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm" placeholder="بالعربية" />
+                    </div>
                   </div>
                   <div>
                     <label class="block text-sm font-medium text-gray-700">الهاتف</label>
@@ -82,6 +101,20 @@
                   <div>
                     <label class="block text-sm font-medium text-gray-700">البريد الإلكتروني</label>
                     <input type="email" v-model="form.email" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm" />
+                  </div>
+                  <div class="grid grid-cols-2 gap-4 pt-4 border-t mt-4">
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700">الراتب الأساسي</label>
+                      <input type="number" step="0.01" v-model.number="form.base_salary" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm" placeholder="0.00" />
+                    </div>
+                    <div>
+                      <label class="block text-sm font-medium text-gray-700">عملة الراتب</label>
+                      <select v-model="form.salary_currency" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm">
+                        <option value="LYD">دينار ليبي (LYD)</option>
+                        <option value="USD">دولار أمريكي (USD)</option>
+                        <option value="EUR">يورو (EUR)</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
                 <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
@@ -111,11 +144,20 @@ const form = ref({
   id: null,
   employee_number: '',
   full_name: '',
+  full_name_ar: '',
   position: '',
+  position_ar: '',
   department: '',
+  department_ar: '',
   phone: '',
-  email: ''
+  email: '',
+  base_salary: 0,
+  salary_currency: 'LYD'
 })
+
+const formatCurrency = (amount) => {
+  return new Intl.NumberFormat('ar-LY', { minimumFractionDigits: 2 }).format(amount)
+}
 
 const fetchEmployees = async () => {
   try {
@@ -128,7 +170,7 @@ const fetchEmployees = async () => {
 
 const openCreateModal = () => {
   isEditing.value = false
-  form.value = { id: null, employee_number: '', full_name: '', position: '', department: '', phone: '', email: '' }
+  form.value = { id: null, employee_number: '', full_name: '', full_name_ar: '', position: '', position_ar: '', department: '', department_ar: '', phone: '', email: '', base_salary: 0, salary_currency: 'LYD' }
   isModalOpen.value = true
 }
 

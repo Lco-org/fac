@@ -148,6 +148,8 @@ func main() {
 	reports.Get("/dashboard", middleware.RequireAnyAuthenticated(), reportHandler.GetDashboardSummary)
 	reports.Get("/containers/:id/statement", middleware.RequireAnyAuthenticated(), reportHandler.GetContainerStatement)
 	reports.Get("/projects/:id/statement", middleware.RequireAnyAuthenticated(), reportHandler.GetProjectStatement)
+	reports.Get("/employees/:id/statement", middleware.RequireFinanceOrAdmin(), reportHandler.GetEmployeeStatement)
+	reports.Get("/members/:id/statement", middleware.RequireFinanceOrAdmin(), reportHandler.GetMemberStatement)
 	reports.Get("/daily-position", middleware.RequireAnyAuthenticated(), reportHandler.GetDailyPosition)
 	reports.Get("/project-summary", middleware.RequireAnyAuthenticated(), reportHandler.GetProjectSummary)
 	reports.Get("/invoices", middleware.RequireAnyAuthenticated(), reportHandler.GetInvoices)
@@ -169,9 +171,12 @@ func main() {
 	members := protected.Group("/members", middleware.RequireRole(models.RoleAdmin))
 	members.Get("", memberHandler.ListMembers)
 	members.Post("", memberHandler.CreateMember)
+	members.Get("/expiring", memberHandler.GetExpiringMembers)
 	members.Get("/:id", memberHandler.GetMember)
 	members.Put("/:id", memberHandler.UpdateMember)
 	members.Delete("/:id", memberHandler.DeleteMember)
+	members.Post("/:id/renew", memberHandler.RenewMembership)
+	members.Get("/:id/subscriptions", memberHandler.GetSubscriptions)
 
 	port := cfg.App.Port
 	log.Printf("🚀 Server starting on port %s", port)

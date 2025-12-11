@@ -163,7 +163,8 @@ func (s *ReportService) GetDashboardSummary(ctx context.Context, userRole string
 	if widgetMap["projects"] {
 		projectRows, err := s.db.QueryContext(ctx, `
 		SELECT id, code, name, name_ar, description, donor_name, donor_name_ar,
-		       start_date, end_date, budget, currency, is_active, created_at
+		       start_date, end_date, budget, currency, is_active,
+		       is_locked, locked_at, lock_reason, locked_by, created_at
 		FROM projects
 		WHERE is_active = true
 		ORDER BY name
@@ -178,7 +179,8 @@ func (s *ReportService) GetDashboardSummary(ctx context.Context, userRole string
 			err := projectRows.Scan(
 				&p.ID, &p.Code, &p.Name, &p.NameAr, &p.Description,
 				&p.DonorName, &p.DonorNameAr, &p.StartDate, &p.EndDate,
-				&p.Budget, &p.Currency, &p.IsActive, &p.CreatedAt,
+				&p.Budget, &p.Currency, &p.IsActive,
+				&p.IsLocked, &p.LockedAt, &p.LockReason, &p.LockedBy, &p.CreatedAt,
 			)
 			if err != nil {
 				return nil, err
@@ -528,13 +530,15 @@ func (s *ReportService) GetProjectStatement(ctx context.Context, projectID strin
 	var project models.Project
 	err := s.db.QueryRowContext(ctx, `
 		SELECT id, code, name, name_ar, description, donor_name, donor_name_ar,
-		       start_date, end_date, budget, currency, is_active, created_at
+		       start_date, end_date, budget, currency, is_active,
+		       is_locked, locked_at, lock_reason, locked_by, created_at
 		FROM projects
 		WHERE id = $1
 	`, projectID).Scan(
 		&project.ID, &project.Code, &project.Name, &project.NameAr, &project.Description,
 		&project.DonorName, &project.DonorNameAr, &project.StartDate, &project.EndDate,
-		&project.Budget, &project.Currency, &project.IsActive, &project.CreatedAt,
+		&project.Budget, &project.Currency, &project.IsActive,
+		&project.IsLocked, &project.LockedAt, &project.LockReason, &project.LockedBy, &project.CreatedAt,
 	)
 	if err != nil {
 		return nil, err
@@ -665,7 +669,8 @@ func (s *ReportService) GetDailyPosition(ctx context.Context) (*models.DailyPosi
 func (s *ReportService) GetProjectSummary(ctx context.Context) ([]models.Project, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, code, name, name_ar, description, donor_name, donor_name_ar,
-		       start_date, end_date, budget, currency, is_active, created_at
+		       start_date, end_date, budget, currency, is_active,
+		       is_locked, locked_at, lock_reason, locked_by, created_at
 		FROM projects
 		WHERE is_active = true
 		ORDER BY code, name
@@ -681,7 +686,8 @@ func (s *ReportService) GetProjectSummary(ctx context.Context) ([]models.Project
 		err := rows.Scan(
 			&p.ID, &p.Code, &p.Name, &p.NameAr, &p.Description,
 			&p.DonorName, &p.DonorNameAr, &p.StartDate, &p.EndDate,
-			&p.Budget, &p.Currency, &p.IsActive, &p.CreatedAt,
+			&p.Budget, &p.Currency, &p.IsActive,
+			&p.IsLocked, &p.LockedAt, &p.LockReason, &p.LockedBy, &p.CreatedAt,
 		)
 		if err != nil {
 			return nil, err
@@ -759,4 +765,289 @@ func (s *ReportService) GetInvoices(ctx context.Context, startDate, endDate *tim
 	}
 
 	return invoices, nil
+}
+
+// GetEmployeeStatement generates a detailed financial statement for an employee
+func (s *ReportService) GetEmployeeStatement(ctx context.Context, employeeID string, startDate, endDate *time.Time) (*models.EmployeeStatement, error) {
+	// Get employee details
+	var employee models.Employee
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, employee_number, full_name, full_name_ar, position, position_ar,
+		       department, department_ar, phone, email, salary, base_salary, 
+		       monthly_budget, salary_currency, join_date, is_active, created_at
+		FROM employees
+		WHERE id = $1
+	`, employeeID).Scan(
+		&employee.ID, &employee.EmployeeNumber, &employee.FullName, &employee.FullNameAr,
+		&employee.Position, &employee.PositionAr, &employee.Department, &employee.DepartmentAr,
+		&employee.Phone, &employee.Email, &employee.Salary, &employee.BaseSalary,
+		&employee.MonthlyBudget, &employee.SalaryCurrency, &employee.JoinDate, &employee.IsActive, &employee.CreatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get transactions for this employee
+	query := `
+		SELECT t.id, t.transaction_number, t.type, t.amount, t.currency,
+		       t.description, t.description_ar,
+		       COALESCE(p.code, ''), COALESCE(p.name, ''),
+		       fc.name, fc.type, t.transaction_date, t.created_at
+		FROM transactions t
+		LEFT JOIN projects p ON t.project_id = p.id
+		JOIN financial_containers fc ON t.container_id = fc.id
+		WHERE t.employee_id = $1 AND t.status = 'completed'
+	`
+	args := []interface{}{employeeID}
+	argCount := 1
+
+	if startDate != nil {
+		argCount++
+		query += ` AND t.transaction_date >= $` + string(rune(argCount+'0'))
+		args = append(args, startDate)
+	}
+	if endDate != nil {
+		argCount++
+		query += ` AND t.transaction_date <= $` + string(rune(argCount+'0'))
+		args = append(args, endDate)
+	}
+
+	query += ` ORDER BY t.transaction_date ASC, t.created_at ASC`
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	transactions := make([]models.EmployeeTransactionDetail, 0)
+	var totalSalary, totalCustody, totalBonus float64
+
+	for rows.Next() {
+		var etd models.EmployeeTransactionDetail
+		err := rows.Scan(
+			&etd.ID, &etd.TransactionNumber, &etd.Type, &etd.Amount, &etd.Currency,
+			&etd.Description, &etd.DescriptionAr,
+			&etd.ProjectCode, &etd.ProjectName,
+			&etd.ContainerName, &etd.ContainerType, &etd.TransactionDate, &etd.CreatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		// Calculate totals by transaction type
+		switch etd.Type {
+		case models.TransactionDisbursementSalary:
+			totalSalary += etd.Amount
+		case models.TransactionDisbursementCustody:
+			totalCustody += etd.Amount
+		case models.TransactionDisbursementBonus:
+			totalBonus += etd.Amount
+		}
+
+		transactions = append(transactions, etd)
+	}
+
+	// Get deductions for this employee
+	deductionQuery := `
+		SELECT id, employee_id, month_year, amount, currency, reason, reason_ar, created_at
+		FROM salary_deductions
+		WHERE employee_id = $1
+	`
+	deductionArgs := []interface{}{employeeID}
+
+	if startDate != nil {
+		deductionQuery += ` AND month_year >= $2`
+		deductionArgs = append(deductionArgs, startDate)
+	}
+	if endDate != nil {
+		if len(deductionArgs) == 1 {
+			deductionQuery += ` AND month_year <= $2`
+		} else {
+			deductionQuery += ` AND month_year <= $3`
+		}
+		deductionArgs = append(deductionArgs, endDate)
+	}
+
+	deductionQuery += ` ORDER BY month_year DESC`
+
+	deductionRows, err := s.db.QueryContext(ctx, deductionQuery, deductionArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer deductionRows.Close()
+
+	deductions := make([]models.SalaryDeduction, 0)
+	var totalDeductions float64
+
+	for deductionRows.Next() {
+		var d models.SalaryDeduction
+		err := deductionRows.Scan(
+			&d.ID, &d.EmployeeID, &d.MonthYear, &d.Amount, &d.Currency,
+			&d.Reason, &d.ReasonAr, &d.CreatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		totalDeductions += d.Amount
+		deductions = append(deductions, d)
+	}
+
+	statement := &models.EmployeeStatement{
+		Employee:     employee,
+		Transactions: transactions,
+		Deductions:   deductions,
+		Summary: models.EmployeeStatementSummary{
+			TotalSalary:      totalSalary,
+			TotalCustody:     totalCustody,
+			TotalBonus:       totalBonus,
+			TotalDeductions:  totalDeductions,
+			NetPayments:      totalSalary + totalBonus - totalDeductions,
+			TransactionCount: len(transactions),
+		},
+		GeneratedAt: time.Now(),
+	}
+
+	return statement, nil
+}
+
+// GetMemberStatement generates a detailed financial statement for a member
+func (s *ReportService) GetMemberStatement(ctx context.Context, memberID string, startDate, endDate *time.Time) (*models.MemberStatement, error) {
+	// Get member details using the view for computed status
+	var member models.Member
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, membership_number, full_name, full_name_ar, member_type, phone, email,
+		       address, address_ar, join_date, original_status, valid_until, last_renewal_date,
+		       subscription_amount, subscription_currency, computed_status, expiring_soon,
+		       days_remaining, is_active, created_at
+		FROM vw_members_with_status
+		WHERE id = $1
+	`, memberID).Scan(
+		&member.ID, &member.MembershipNumber, &member.FullName, &member.FullNameAr,
+		&member.MemberType, &member.Phone, &member.Email, &member.Address, &member.AddressAr,
+		&member.JoinDate, &member.Status, &member.ValidUntil, &member.LastRenewalDate,
+		&member.SubscriptionAmount, &member.SubscriptionCurrency, &member.ComputedStatus,
+		&member.ExpiringSoon, &member.DaysRemaining, &member.IsActive, &member.CreatedAt,
+	)
+	if err != nil {
+		// Fallback to regular members table if view doesn't exist
+		err = s.db.QueryRowContext(ctx, `
+			SELECT id, membership_number, full_name, full_name_ar, member_type, phone, email,
+			       address, address_ar, join_date, status, valid_until, last_renewal_date,
+			       subscription_amount, subscription_currency, is_active, created_at
+			FROM members
+			WHERE id = $1
+		`, memberID).Scan(
+			&member.ID, &member.MembershipNumber, &member.FullName, &member.FullNameAr,
+			&member.MemberType, &member.Phone, &member.Email, &member.Address, &member.AddressAr,
+			&member.JoinDate, &member.Status, &member.ValidUntil, &member.LastRenewalDate,
+			&member.SubscriptionAmount, &member.SubscriptionCurrency, &member.IsActive, &member.CreatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Get subscriptions for this member
+	subRows, err := s.db.QueryContext(ctx, `
+		SELECT id, member_id, transaction_id, amount, currency,
+		       payment_date, valid_from, valid_until, notes, notes_ar, created_at
+		FROM member_subscriptions
+		WHERE member_id = $1
+		ORDER BY payment_date DESC
+	`, memberID)
+	if err != nil {
+		return nil, err
+	}
+	defer subRows.Close()
+
+	subscriptions := make([]models.MemberSubscription, 0)
+	for subRows.Next() {
+		var sub models.MemberSubscription
+		err := subRows.Scan(
+			&sub.ID, &sub.MemberID, &sub.TransactionID, &sub.Amount, &sub.Currency,
+			&sub.PaymentDate, &sub.ValidFrom, &sub.ValidUntil, &sub.Notes, &sub.NotesAr, &sub.CreatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		subscriptions = append(subscriptions, sub)
+	}
+
+	// Get transactions for this member
+	query := `
+		SELECT t.id, t.transaction_number, t.type, t.amount, t.currency,
+		       t.description, t.description_ar,
+		       COALESCE(p.code, ''), COALESCE(p.name, ''),
+		       fc.name, t.transaction_date, t.created_at
+		FROM transactions t
+		LEFT JOIN projects p ON t.project_id = p.id
+		JOIN financial_containers fc ON t.container_id = fc.id
+		WHERE t.member_id = $1 AND t.status = 'completed'
+	`
+	args := []interface{}{memberID}
+	argCount := 1
+
+	if startDate != nil {
+		argCount++
+		query += ` AND t.transaction_date >= $` + string(rune(argCount+'0'))
+		args = append(args, startDate)
+	}
+	if endDate != nil {
+		argCount++
+		query += ` AND t.transaction_date <= $` + string(rune(argCount+'0'))
+		args = append(args, endDate)
+	}
+
+	query += ` ORDER BY t.transaction_date ASC, t.created_at ASC`
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	transactions := make([]models.MemberTransactionDetail, 0)
+	var totalDeposits float64
+
+	for rows.Next() {
+		var mtd models.MemberTransactionDetail
+		err := rows.Scan(
+			&mtd.ID, &mtd.TransactionNumber, &mtd.Type, &mtd.Amount, &mtd.Currency,
+			&mtd.Description, &mtd.DescriptionAr,
+			&mtd.ProjectCode, &mtd.ProjectName,
+			&mtd.ContainerName, &mtd.TransactionDate, &mtd.CreatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		// Sum up deposits (income transactions)
+		if mtd.Type == models.TransactionIncomeGrant || mtd.Type == models.TransactionIncomeDonation {
+			totalDeposits += mtd.Amount
+		}
+
+		transactions = append(transactions, mtd)
+	}
+
+	// Calculate membership years
+	membershipYears := 0
+	if member.JoinDate != nil {
+		membershipYears = int(time.Since(*member.JoinDate).Hours() / 24 / 365)
+	}
+
+	statement := &models.MemberStatement{
+		Member:        member,
+		Subscriptions: subscriptions,
+		Transactions:  transactions,
+		Summary: models.MemberStatementSummary{
+			TotalDeposits:     totalDeposits,
+			SubscriptionsPaid: len(subscriptions),
+			MembershipYears:   membershipYears,
+			TransactionCount:  len(transactions),
+		},
+		GeneratedAt: time.Now(),
+	}
+
+	return statement, nil
 }

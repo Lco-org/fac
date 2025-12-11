@@ -46,7 +46,8 @@ onMounted(async () => {
     ])
     
     dashboardData.value = dashboardResponse.data
-    widgetConfig.value = widgetResponse.data.sort((a, b) => a.display_order - b.display_order)
+    const widgets = Array.isArray(widgetResponse.data) ? widgetResponse.data : []
+    widgetConfig.value = widgets.sort((a, b) => a.display_order - b.display_order)
   } catch (err) {
     console.error('Failed to load dashboard data:', err)
     error.value = 'فشل تحميل بيانات لوحة التحكم. يرجى المحاولة مرة أخرى.'
