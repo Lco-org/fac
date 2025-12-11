@@ -69,7 +69,13 @@ const transactionDescriptionParts = computed(() => {
   const containerType = c.type === 'cash' ? 'نقدي' : 'مصرفي'
   const containerName = c.name_ar || c.name
   const projectName = p.name_ar || p.name
-  const beneficiary = t.payee_payer_ar || t.payee_payer
+  
+  let beneficiary = t.payee_payer_ar || t.payee_payer
+  if (receiptData.value.employee) {
+    beneficiary = receiptData.value.employee.full_name_ar || receiptData.value.employee.full_name
+  } else if (receiptData.value.member) {
+    beneficiary = receiptData.value.member.full_name_ar || receiptData.value.member.full_name
+  }
   
   // Get transaction type in Arabic
   let typeText = ''
@@ -364,8 +370,14 @@ const formatTime = (date) => {
 
         <!-- Additional details grid -->
         <div class="details-grid">
-          <div class="detail-row" v-if="receiptData.transaction.payee_payer_ar || receiptData.transaction.payee_payer">
+          <div class="detail-row" v-if="receiptData.employee || receiptData.member">
             <span class="detail-label">{{ isIncome ? 'المانح/الدافع:' : 'المستفيد:' }}</span>
+            <span class="detail-value" v-if="receiptData.employee">{{ receiptData.employee.full_name_ar || receiptData.employee.full_name }}</span>
+            <span class="detail-value" v-else-if="receiptData.member">{{ receiptData.member.full_name_ar || receiptData.member.full_name }}</span>
+          </div>
+
+          <div class="detail-row" v-if="receiptData.transaction.payee_payer_ar || receiptData.transaction.payee_payer">
+            <span class="detail-label">ملاحظات إضافية:</span>
             <span class="detail-value">{{ receiptData.transaction.payee_payer_ar || receiptData.transaction.payee_payer }}</span>
           </div>
 

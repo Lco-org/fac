@@ -186,7 +186,11 @@ const resetForm = () => {
           </label>
           <select v-model="form.project_id" required class="input-field">
             <option value="">اختر...</option>
-            <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.code }} - {{ p.name }}</option>
+            <option v-for="p in projects.filter(proj => {
+              if (!form.container_id) return true;
+              const container = containers.find(c => c.id === form.container_id);
+              return !container || (proj.currency || 'LYD') === container.currency;
+            })" :key="p.id" :value="p.id">{{ p.code }} - {{ p.name }}</option>
           </select>
         </div>
 

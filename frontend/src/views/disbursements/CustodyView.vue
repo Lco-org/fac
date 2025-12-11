@@ -71,7 +71,7 @@ onMounted(async () => {
 const onEmployeeChange = () => {
   const selectedEmployee = employees.value.find(e => e.id === form.value.employee_id)
   if (selectedEmployee) {
-    form.value.payee_payer = selectedEmployee.name
+    // form.value.payee_payer = selectedEmployee.name // Removed auto-fill
   }
 }
 
@@ -193,7 +193,11 @@ const resetForm = () => {
           <label class="block text-sm font-medium text-gray-700 mb-2">المشروع <span class="text-deficit">*</span></label>
           <select v-model="form.project_id" required class="input-field">
             <option value="">اختر...</option>
-            <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.code }} - {{ p.name }}</option>
+            <option v-for="p in projects.filter(proj => {
+              if (!form.container_id) return true;
+              const container = containers.find(c => c.id === form.container_id);
+              return !container || (proj.currency || 'LYD') === container.currency;
+            })" :key="p.id" :value="p.id">{{ p.code }} - {{ p.name }}</option>
           </select>
         </div>
 
@@ -203,8 +207,8 @@ const resetForm = () => {
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">المستفيد (الموظف)</label>
-          <input v-model="form.payee_payer" type="text" class="input-field" placeholder="اسم الموظف" />
+          <label class="block text-sm font-medium text-gray-700 mb-2">ملاحظات إضافية</label>
+          <input v-model="form.payee_payer" type="text" class="input-field" placeholder="أي ملاحظات أخرى..." />
         </div>
 
         <div class="flex gap-3">

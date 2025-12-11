@@ -547,7 +547,7 @@ func (s *ReportService) GetProjectStatement(ctx context.Context, projectID strin
 	query := `
 		SELECT t.id, t.transaction_number, t.type, t.amount, t.currency,
 		       t.description, t.description_ar, t.payee_payer,
-		       fc.name, fc.type, t.transaction_date, t.created_at
+		       fc.name, fc.type, fc.currency, t.transaction_date, t.created_at
 		FROM transactions t
 		JOIN financial_containers fc ON t.container_id = fc.id
 		WHERE t.project_id = $1 AND t.status = 'completed'
@@ -582,7 +582,7 @@ func (s *ReportService) GetProjectStatement(ctx context.Context, projectID strin
 		err := rows.Scan(
 			&ptd.ID, &ptd.TransactionNumber, &ptd.Type, &ptd.Amount, &ptd.Currency,
 			&ptd.Description, &ptd.DescriptionAr, &ptd.PayeePayer,
-			&ptd.ContainerName, &ptd.ContainerType, &ptd.TransactionDate, &ptd.CreatedAt,
+			&ptd.ContainerName, &ptd.ContainerType, &ptd.ContainerCurrency, &ptd.TransactionDate, &ptd.CreatedAt,
 		)
 		if err != nil {
 			return nil, err

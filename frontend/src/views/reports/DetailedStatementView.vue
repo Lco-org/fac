@@ -241,18 +241,18 @@
                     <div v-if="transaction.payee_payer" class="text-xs text-gray-500 mt-1">{{ transaction.payee_payer }}</div>
                   </td>
                   <td v-if="statementType === 'container'" class="px-4 py-3 text-sm font-medium" data-label="المشروع">{{ transaction.project_name }}</td>
-                  <td v-if="statementType === 'project'" class="px-4 py-3 text-sm" data-label="الحساب">{{ transaction.container_name }}</td>
+                  <td v-if="statementType === 'project'" class="px-4 py-3 text-sm" data-label="الحساب">{{ transaction.container_name }} <span class="text-gray-500">({{ getCurrencySymbol(transaction.container_currency || '') }})</span></td>
                   <td v-if="statementType === 'employee'" class="px-4 py-3 text-sm font-medium" data-label="المشروع">{{ transaction.project_name || '-' }}</td>
                   <td class="px-4 py-3 text-center" data-label="مدين (إضافة)">
-                    <span v-if="isCredit(transaction)" class="text-lg font-bold text-green-600">{{ formatNumber(transaction.amount) }}</span>
+                    <span v-if="isCredit(transaction)" class="text-lg font-bold text-green-600">{{ formatNumber(transaction.amount) }} <span class="text-xs text-gray-500">{{ getCurrencySymbol(transaction.currency) }}</span></span>
                     <span v-else class="text-gray-300">-</span>
                   </td>
                   <td class="px-4 py-3 text-center" data-label="دائن (خصم)">
-                    <span v-if="!isCredit(transaction)" class="text-lg font-bold text-red-600">{{ formatNumber(transaction.amount) }}</span>
+                    <span v-if="!isCredit(transaction)" class="text-lg font-bold text-red-600">{{ formatNumber(transaction.amount) }} <span class="text-xs text-gray-500">{{ getCurrencySymbol(transaction.currency) }}</span></span>
                     <span v-else class="text-gray-300">-</span>
                   </td>
                   <td v-if="statementType === 'container'" class="px-4 py-3 text-center" data-label="الرصيد">
-                    <span class="text-lg font-bold text-blue-600">{{ formatNumber(transaction.balance_after) }}</span>
+                    <span class="text-lg font-bold text-blue-600">{{ formatNumber(transaction.balance_after) }} <span class="text-xs text-gray-500">{{ getCurrencySymbol(statement.container.currency) }}</span></span>
                   </td>
                 </tr>
               </tbody>
@@ -260,9 +260,9 @@
                 <tr>
                   <td colspan="3"></td>
                   <td class="px-4 py-4 text-center font-bold text-lg">الإجمالي:</td>
-                  <td class="px-4 py-4 text-center font-bold text-xl text-green-600">{{ formatNumber(statement.summary.total_income) }}</td>
-                  <td class="px-4 py-4 text-center font-bold text-xl text-red-600">{{ formatNumber(statement.summary.total_expenses) }}</td>
-                  <td v-if="statementType === 'container'" class="px-4 py-4 text-center font-bold text-xl text-blue-600">{{ formatNumber(statement.summary.closing_balance) }}</td>
+                  <td class="px-4 py-4 text-center font-bold text-xl text-green-600">{{ formatNumber(statement.summary.total_income) }} <span class="text-xs text-gray-500">{{ getCurrencySymbol(statement.container ? statement.container.currency : '') }}</span></td>
+                  <td class="px-4 py-4 text-center font-bold text-xl text-red-600">{{ formatNumber(statement.summary.total_expenses) }} <span class="text-xs text-gray-500">{{ getCurrencySymbol(statement.container ? statement.container.currency : '') }}</span></td>
+                  <td v-if="statementType === 'container'" class="px-4 py-4 text-center font-bold text-xl text-blue-600">{{ formatNumber(statement.summary.closing_balance) }} <span class="text-xs text-gray-500">{{ getCurrencySymbol(statement.container.currency) }}</span></td>
                 </tr>
               </tfoot>
             </table>
@@ -400,6 +400,16 @@ const formatNumber = (number) => {
 const getCurrencyName = (code) => {
   const currencies = { 'LYD': 'دينار ليبي', 'USD': 'دولار أمريكي', 'EUR': 'يورو' }
   return currencies[code] || code
+}
+
+const getCurrencySymbol = (code) => {
+  const symbols = {
+    'LYD': 'د.ل',
+    'USD': '$',
+    'EUR': '€',
+    'GBP': '£'
+  }
+  return symbols[code] || code
 }
 
 const getTransactionTypeName = (type) => {

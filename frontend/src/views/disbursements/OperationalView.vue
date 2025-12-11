@@ -71,7 +71,7 @@ onMounted(async () => {
 const onEmployeeChange = () => {
   const selectedEmployee = employees.value.find(e => e.id === form.value.employee_id)
   if (selectedEmployee) {
-    form.value.payee_payer = selectedEmployee.name
+    // form.value.payee_payer = selectedEmployee.name // Removed auto-fill
   }
 }
 
@@ -188,7 +188,11 @@ const resetForm = () => {
           </label>
           <select v-model="form.project_id" required class="input-field">
             <option value="">اختر المشروع...</option>
-            <option v-for="project in projects" :key="project.id" :value="project.id">
+            <option v-for="project in projects.filter(p => {
+              if (!form.container_id) return true;
+              const container = containers.find(c => c.id === form.container_id);
+              return !container || (p.currency || 'LYD') === container.currency;
+            })" :key="project.id" :value="project.id">
               {{ project.code }} - {{ project.name }}
             </option>
           </select>
@@ -212,8 +216,8 @@ const resetForm = () => {
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">المستفيد</label>
-          <input v-model="form.payee_payer" type="text" class="input-field" placeholder="اسم المستفيد" />
+          <label class="block text-sm font-medium text-gray-700 mb-2">ملاحظات إضافية</label>
+          <input v-model="form.payee_payer" type="text" class="input-field" placeholder="أي ملاحظات أخرى..." />
         </div>
 
         <div>

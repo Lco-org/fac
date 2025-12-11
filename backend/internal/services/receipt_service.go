@@ -26,6 +26,8 @@ type ReceiptData struct {
 	CreatedByUser      UserBasicInfo              `json:"created_by_user"`
 	RelatedTransaction *models.Transaction        `json:"related_transaction,omitempty"`
 	RelatedContainer   *models.FinancialContainer `json:"related_container,omitempty"`
+	Employee           *models.Employee           `json:"employee,omitempty"`
+	Member             *models.Member             `json:"member,omitempty"`
 }
 
 type UserBasicInfo struct {
@@ -42,6 +44,7 @@ func (s *ReceiptService) GetReceiptData(ctx context.Context, transactionID uuid.
 			t.id, t.transaction_number, t.type, t.status, t.amount, t.currency, 
 			t.exchange_rate, t.amount_local, t.container_id, 
 			COALESCE(t.project_id, '00000000-0000-0000-0000-000000000000'),
+			t.employee_id, t.member_id,
 			t.description, t.description_ar, t.payee_payer, t.payee_payer_ar,
 			t.reference_number, t.is_deficit, t.deficit_approved_by, t.deficit_warning_shown,
 			t.balance_before, t.balance_after, t.attachment_url, t.transaction_date,
@@ -60,6 +63,8 @@ func (s *ReceiptService) GetReceiptData(ctx context.Context, transactionID uuid.
 		&receipt.Transaction.AmountLocal,
 		&receipt.Transaction.ContainerID,
 		&receipt.Transaction.ProjectID,
+		&receipt.Transaction.EmployeeID,
+		&receipt.Transaction.MemberID,
 		&receipt.Transaction.Description,
 		&receipt.Transaction.DescriptionAr,
 		&receipt.Transaction.PayeePayer,
@@ -156,6 +161,32 @@ func (s *ReceiptService) GetReceiptData(ctx context.Context, transactionID uuid.
 		receipt.Project.NameAr = &nameAr
 		receipt.Project.Currency = receipt.Transaction.Currency
 		receipt.Project.IsActive = true
+	}
+
+	if receipt.Transaction.EmployeeID != nil {
+		var employee models.Employee
+		err = s.db.QueryRowContext(ctx, `
+			SELECT id, employee_number, full_name, full_name_ar, position, position_ar
+			FROM employees WHERE id = $1
+		`, receipt.Transaction.EmployeeID).Scan(
+			&employee.ID, &employee.EmployeeNumber, &employee.FullName, &employee.FullNameAr, &employee.Position, &employee.PositionAr,
+		)
+		if err == nil {
+			receipt.Employee = &employee
+		}
+	}
+
+	if receipt.Transaction.MemberID != nil {
+		var member models.Member
+		err = s.db.QueryRowContext(ctx, `
+			SELECT id, membership_number, full_name, full_name_ar, member_type
+			FROM members WHERE id = $1
+		`, receipt.Transaction.MemberID).Scan(
+			&member.ID, &member.MembershipNumber, &member.FullName, &member.FullNameAr, &member.MemberType,
+		)
+		if err == nil {
+			receipt.Member = &member
+		}
 	}
 
 	err = s.db.QueryRowContext(ctx, `

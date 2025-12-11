@@ -321,6 +321,7 @@ type ProjectTransactionDetail struct {
 	ProjectName       string          `json:"project_name,omitempty"`
 	ContainerName     string          `json:"container_name"`
 	ContainerType     ContainerType   `json:"container_type"`
+	ContainerCurrency CurrencyCode    `json:"container_currency"`
 	TransactionDate   time.Time       `json:"transaction_date"`
 	CreatedAt         time.Time       `json:"created_at"`
 }
