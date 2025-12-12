@@ -2,11 +2,216 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================
+   THEME SYSTEM - CSS Variables
+   ============================================ */
+:root {
+  --color-primary: #1e40af;
+  --color-primary-50: rgba(30, 64, 175, 0.1);
+  --color-primary-100: rgba(30, 64, 175, 0.2);
+  --color-primary-200: rgba(30, 64, 175, 0.3);
+  --color-primary-600: #1e40af;
+  --color-primary-700: #1e3a8a;
+  --color-primary-800: #1e3370;
+  --color-primary-900: #172554;
+  --base-font-size: 16px;
+  --border-radius: 8px;
+}
+
+/* Light Theme (Default) */
+.theme-light {
+  --bg-primary: #f9fafb;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f3f4f6;
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --border-color: #e5e7eb;
+}
+
+/* Dark Theme */
+.theme-dark {
+  --bg-primary: #111827;
+  --bg-secondary: #1f2937;
+  --bg-tertiary: #374151;
+  --text-primary: #f9fafb;
+  --text-secondary: #9ca3af;
+  --border-color: #4b5563;
+}
+
+.theme-dark body,
+.theme-dark .min-h-screen {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+.theme-dark .card,
+.theme-dark .bg-white {
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+}
+
+.theme-dark header {
+  background-color: var(--bg-secondary) !important;
+  border-color: var(--border-color) !important;
+}
+
+.theme-dark .bg-gray-50,
+.theme-dark .bg-gray-100,
+.theme-dark .bg-gray-200 {
+  background-color: var(--bg-tertiary) !important;
+}
+
+.theme-dark .text-gray-900,
+.theme-dark .text-gray-800,
+.theme-dark .text-gray-700 {
+  color: var(--text-primary) !important;
+}
+
+.theme-dark .text-gray-600,
+.theme-dark .text-gray-500,
+.theme-dark .text-gray-400 {
+  color: var(--text-secondary) !important;
+}
+
+.theme-dark .border-gray-200,
+.theme-dark .border-gray-300,
+.theme-dark .border-gray-100,
+.theme-dark .border {
+  border-color: var(--border-color) !important;
+}
+
+.theme-dark input,
+.theme-dark select,
+.theme-dark textarea {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-color) !important;
+}
+
+.theme-dark .popover-menu {
+  background-color: var(--bg-secondary) !important;
+}
+
+.theme-dark .menu-item:hover {
+  background-color: var(--bg-tertiary) !important;
+}
+
+/* Dark mode buttons */
+.theme-dark .btn-secondary {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-color) !important;
+}
+
+.theme-dark .btn-secondary:hover {
+  background-color: #4b5563 !important;
+}
+
+/* Dark mode tables */
+.theme-dark table,
+.theme-dark th,
+.theme-dark td {
+  border-color: var(--border-color) !important;
+}
+
+.theme-dark thead {
+  background-color: var(--bg-tertiary) !important;
+}
+
+.theme-dark tbody tr:hover {
+  background-color: var(--bg-tertiary) !important;
+}
+
+/* Dark mode shadows */
+.theme-dark .shadow,
+.theme-dark .shadow-md,
+.theme-dark .shadow-lg {
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Dark mode specific backgrounds */
+.theme-dark .bg-primary-50,
+.theme-dark .bg-primary-100 {
+  background-color: rgba(59, 130, 246, 0.2) !important;
+}
+
+.theme-dark .bg-green-50 {
+  background-color: rgba(34, 197, 94, 0.2) !important;
+}
+
+.theme-dark .bg-red-50 {
+  background-color: rgba(239, 68, 68, 0.2) !important;
+}
+
+.theme-dark .bg-yellow-50,
+.theme-dark .bg-amber-50 {
+  background-color: rgba(234, 179, 8, 0.2) !important;
+}
+
+/* Dark mode dividers */
+.theme-dark .divide-gray-200>*+* {
+  border-color: var(--border-color) !important;
+}
+
+/* Dark mode ring colors */
+.theme-dark .ring-gray-200,
+.theme-dark .ring-gray-300 {
+  --tw-ring-color: var(--border-color) !important;
+}
+
+/* Dark mode placeholder text */
+.theme-dark ::placeholder {
+  color: #6b7280 !important;
+}
+
+/* Sepia Theme */
+.theme-sepia {
+  --bg-primary: #fef3c7;
+  --bg-secondary: #fffbeb;
+  --bg-tertiary: #fde68a;
+  --text-primary: #78350f;
+  --text-secondary: #92400e;
+  --border-color: #d97706;
+}
+
+.theme-sepia body,
+.theme-sepia .min-h-screen {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+.theme-sepia .card,
+.theme-sepia .bg-white {
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+}
+
+.theme-sepia header {
+  background-color: var(--bg-secondary) !important;
+}
+
+.theme-sepia .bg-gray-50,
+.theme-sepia .bg-gray-100 {
+  background-color: var(--bg-tertiary) !important;
+}
+
+.theme-sepia .text-gray-900,
+.theme-sepia .text-gray-800,
+.theme-sepia .text-gray-700 {
+  color: var(--text-primary) !important;
+}
+
+.theme-sepia .text-gray-600,
+.theme-sepia .text-gray-500 {
+  color: var(--text-secondary) !important;
+}
+
 @layer base {
   body {
     @apply bg-gray-50 text-gray-900;
     direction: rtl;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: var(--base-font-size);
   }
 }
 
@@ -14,31 +219,31 @@
   .btn-primary {
     @apply bg-primary-600 hover:bg-primary-700 text-white font-medium py-2 px-4 rounded-lg transition-colors;
   }
-  
+
   .btn-secondary {
     @apply bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-4 rounded-lg transition-colors;
   }
-  
+
   .btn-danger {
     @apply bg-deficit hover:bg-deficit-dark text-white font-medium py-2 px-4 rounded-lg transition-colors;
   }
-  
+
   .input-field {
     @apply w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent;
   }
-  
+
   .card {
     @apply bg-white rounded-lg shadow-md p-6;
   }
-  
+
   .balance-positive {
     @apply text-surplus font-semibold;
   }
-  
+
   .balance-negative {
     @apply text-deficit font-semibold;
   }
-  
+
   .balance-zero {
     @apply text-gray-500 font-semibold;
   }
@@ -51,11 +256,12 @@
 
 /* Mobile-first responsive table - transforms to cards on small screens */
 @media screen and (max-width: 768px) {
+
   /* Hide table headers on mobile - will use data-label instead */
   .responsive-table thead {
     display: none;
   }
-  
+
   /* Make table display as block */
   .responsive-table,
   .responsive-table tbody,
@@ -64,7 +270,7 @@
     display: block;
     width: 100%;
   }
-  
+
   /* Style each row as a card */
   .responsive-table tbody tr {
     margin-bottom: 1rem;
@@ -74,7 +280,7 @@
     background-color: white;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   }
-  
+
   /* Style each cell */
   .responsive-table td {
     display: flex;
@@ -84,12 +290,12 @@
     border-bottom: 1px solid #f3f4f6;
     text-align: left;
   }
-  
+
   /* Remove border from last cell */
   .responsive-table td:last-child {
     border-bottom: none;
   }
-  
+
   /* Add label before each cell content using data-label attribute */
   .responsive-table td::before {
     content: attr(data-label);
@@ -99,17 +305,17 @@
     padding-left: 1rem;
     flex-shrink: 0;
   }
-  
+
   /* Cell content */
-  .responsive-table td > * {
+  .responsive-table td>* {
     text-align: left;
   }
-  
+
   /* Footer cells also transform */
   .responsive-table tfoot {
     display: block;
   }
-  
+
   .responsive-table tfoot tr {
     display: flex;
     flex-wrap: wrap;
@@ -120,14 +326,14 @@
     border-radius: 0.75rem;
     margin-top: 1rem;
   }
-  
+
   .responsive-table tfoot td {
     display: inline-block;
     width: auto;
     border: none;
     padding: 0.25rem 0.5rem;
   }
-  
+
   .responsive-table tfoot td[colspan] {
     width: 100%;
     text-align: center;
@@ -142,7 +348,7 @@
     align-items: flex-start;
     gap: 0.25rem;
   }
-  
+
   .responsive-table td::before {
     padding-left: 0;
     font-size: 0.75rem;

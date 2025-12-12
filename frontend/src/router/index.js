@@ -103,10 +103,15 @@ const routes = [
                 meta: { requiresRole: ['admin'] },
             },
             {
+                path: 'account',
+                name: 'AccountSettings',
+                component: () => import('@/views/account/AccountSettingsView.vue'),
+                meta: { requiresAuth: true },
+            },
+            {
                 path: 'account/security',
                 name: 'AccountSecurity',
-                component: () => import('@/views/admin/AccountSecurityView.vue'),
-                meta: { requiresAuth: true },
+                redirect: '/account',
             },
             {
                 path: 'hr/employees',

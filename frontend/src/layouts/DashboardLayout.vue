@@ -2,10 +2,12 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { usePreferencesStore } from '@/stores/preferences'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const preferencesStore = usePreferencesStore() // Initialize preferences on app load
 
 // Popover state
 const showPopover = ref(false)
@@ -261,13 +263,13 @@ onUnmounted(() => {
             {{ authStore.userRole === 'admin' ? 'مدير' : authStore.userRole === 'finance' ? 'مالي' : authStore.userRole === 'hr' ? 'موارد بشرية' : 'مراجع' }}
           </span>
 
-          <!-- Security link -->
+          <!-- Account Settings link -->
           <RouterLink
-            to="/account/security"
+            to="/account"
             class="text-gray-600 hover:text-primary-600 transition-colors text-xl"
-            title="إعدادات الأمان"
+            title="إعدادات الحساب"
           >
-            🔐
+            ⚙️
           </RouterLink>
 
           <!-- Logout button -->
