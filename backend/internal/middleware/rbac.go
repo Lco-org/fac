@@ -38,7 +38,7 @@ func RequireFinanceOrAdmin() fiber.Handler {
 
 // RequireAnyAuthenticated - Any authenticated user
 func RequireAnyAuthenticated() fiber.Handler {
-	return RequireRole(models.RoleAdmin, models.RoleFinance, models.RoleAuditor)
+	return RequireRole(models.RoleAdmin, models.RoleFinance, models.RoleAuditor, models.RoleHR)
 }
 
 // CanDelete checks if user can delete (only Admin can delete, Finance can only reverse)
@@ -50,11 +50,11 @@ func CanDelete(c *fiber.Ctx) bool {
 // CanWrite checks if user can create/update
 func CanWrite(c *fiber.Ctx) bool {
 	userRole := GetUserRole(c)
-	return userRole == models.RoleAdmin || userRole == models.RoleFinance
+	return userRole == models.RoleAdmin || userRole == models.RoleFinance || userRole == models.RoleHR
 }
 
 // CanRead checks if user can read
 func CanRead(c *fiber.Ctx) bool {
 	userRole := GetUserRole(c)
-	return userRole == models.RoleAdmin || userRole == models.RoleFinance || userRole == models.RoleAuditor
+	return userRole == models.RoleAdmin || userRole == models.RoleFinance || userRole == models.RoleAuditor || userRole == models.RoleHR
 }

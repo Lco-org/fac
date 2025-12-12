@@ -85,6 +85,7 @@ const menuItems = computed(() => {
         { title: 'الموظفين', path: '/hr/employees' },
         { title: 'الخصومات', path: '/hr/deductions' },
         { title: 'المكافآت', path: '/hr/bonuses' },
+        { title: 'الرواتب', path: '/hr/salaries' },
       ],
     },
     {

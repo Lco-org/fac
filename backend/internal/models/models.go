@@ -372,31 +372,35 @@ type Member struct {
 }
 
 type CreateEmployeeRequest struct {
-	EmployeeNumber string     `json:"employee_number"`
-	FullName       string     `json:"full_name"`
-	FullNameAr     *string    `json:"full_name_ar,omitempty"`
-	Position       *string    `json:"position,omitempty"`
-	PositionAr     *string    `json:"position_ar,omitempty"`
-	Department     *string    `json:"department,omitempty"`
-	DepartmentAr   *string    `json:"department_ar,omitempty"`
-	Phone          *string    `json:"phone,omitempty"`
-	Email          *string    `json:"email,omitempty"`
-	Salary         *float64   `json:"salary,omitempty"`
-	JoinDate       *time.Time `json:"join_date,omitempty"`
+	EmployeeNumber string       `json:"employee_number"`
+	FullName       string       `json:"full_name"`
+	FullNameAr     *string      `json:"full_name_ar,omitempty"`
+	Position       *string      `json:"position,omitempty"`
+	PositionAr     *string      `json:"position_ar,omitempty"`
+	Department     *string      `json:"department,omitempty"`
+	DepartmentAr   *string      `json:"department_ar,omitempty"`
+	Phone          *string      `json:"phone,omitempty"`
+	Email          *string      `json:"email,omitempty"`
+	Salary         *float64     `json:"salary,omitempty"` // Deprecated
+	BaseSalary     float64      `json:"base_salary"`
+	SalaryCurrency CurrencyCode `json:"salary_currency"`
+	JoinDate       *time.Time   `json:"join_date,omitempty"`
 }
 
 type UpdateEmployeeRequest struct {
-	FullName     *string    `json:"full_name,omitempty"`
-	FullNameAr   *string    `json:"full_name_ar,omitempty"`
-	Position     *string    `json:"position,omitempty"`
-	PositionAr   *string    `json:"position_ar,omitempty"`
-	Department   *string    `json:"department,omitempty"`
-	DepartmentAr *string    `json:"department_ar,omitempty"`
-	Phone        *string    `json:"phone,omitempty"`
-	Email        *string    `json:"email,omitempty"`
-	Salary       *float64   `json:"salary,omitempty"`
-	JoinDate     *time.Time `json:"join_date,omitempty"`
-	IsActive     *bool      `json:"is_active,omitempty"`
+	FullName       *string       `json:"full_name,omitempty"`
+	FullNameAr     *string       `json:"full_name_ar,omitempty"`
+	Position       *string       `json:"position,omitempty"`
+	PositionAr     *string       `json:"position_ar,omitempty"`
+	Department     *string       `json:"department,omitempty"`
+	DepartmentAr   *string       `json:"department_ar,omitempty"`
+	Phone          *string       `json:"phone,omitempty"`
+	Email          *string       `json:"email,omitempty"`
+	Salary         *float64      `json:"salary,omitempty"` // Deprecated
+	BaseSalary     *float64      `json:"base_salary,omitempty"`
+	SalaryCurrency *CurrencyCode `json:"salary_currency,omitempty"`
+	JoinDate       *time.Time    `json:"join_date,omitempty"`
+	IsActive       *bool         `json:"is_active,omitempty"`
 }
 
 type CreateMemberRequest struct {
@@ -519,6 +523,17 @@ type CreateSalaryBonusRequest struct {
 	Currency   CurrencyCode `json:"currency"`
 	Reason     string       `json:"reason"`
 	ReasonAr   *string      `json:"reason_ar,omitempty"`
+}
+
+type SalarySummary struct {
+	EmployeeID      uuid.UUID    `json:"employee_id"`
+	EmployeeName    string       `json:"employee_name"`
+	EmployeeNumber  string       `json:"employee_number"`
+	BaseSalary      float64      `json:"base_salary"`
+	TotalBonuses    float64      `json:"total_bonuses"`
+	TotalDeductions float64      `json:"total_deductions"`
+	NetSalary       float64      `json:"net_salary"`
+	Currency        CurrencyCode `json:"currency"`
 }
 
 // ============================================================================

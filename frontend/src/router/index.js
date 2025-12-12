@@ -38,9 +38,15 @@ const routes = [
             },
             {
                 path: 'disbursements/salaries',
-                name: 'Salaries',
+                name: 'DisbursementsSalaries',
                 component: () => import('@/views/disbursements/SalariesView.vue'),
                 meta: { requiresRole: ['admin', 'finance'] },
+            },
+            {
+                path: 'hr/salaries',
+                name: 'Salaries',
+                component: () => import('@/views/hr/SalariesView.vue'),
+                meta: { requiresRole: ['admin', 'hr', 'finance'] },
             },
             {
                 path: 'disbursements/operational',

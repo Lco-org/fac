@@ -1,6 +1,6 @@
 <script setup>
-import { ref, onMounted } from 'vue'
-import api from '@/api/client' // Using standard api client
+import { ref, onMounted, computed } from 'vue'
+import api from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 
 const authStore = useAuthStore()
@@ -32,7 +32,7 @@ const fetchDeductions = async () => {
   loading.value = true
   try {
     const res = await api.get('/hr/deductions')
-    deductions.value = res.data
+    deductions.value = res.data || []
   } catch (err) {
     error.value = 'Failed to load deductions'
     console.error(err)
@@ -41,6 +41,18 @@ const fetchDeductions = async () => {
   }
 }
 
+const groupedDeductions = computed(() => {
+  const groups = {}
+  deductions.value.forEach(d => {
+    const currency = d.currency || 'LYD'
+    if (!groups[currency]) {
+      groups[currency] = []
+    }
+    groups[currency].push(d)
+  })
+  return groups
+})
+
 const handleSubmit = async () => {
   if (!form.value.employee_id || !form.value.amount || !form.value.reason) {
     alert('Please fill all required fields')
@@ -48,7 +60,6 @@ const handleSubmit = async () => {
   }
 
   try {
-    // Format month_year to full date (first of month)
     const payload = {
       ...form.value,
       amount: parseFloat(form.value.amount),
@@ -61,7 +72,8 @@ const handleSubmit = async () => {
     resetForm()
   } catch (err) {
     console.error('Failed to create deduction', err)
-    alert('Failed to create deduction')
+    const serverError = err.response?.data?.error || 'Failed to create deduction'
+    alert(serverError)
   }
 }
 
@@ -105,48 +117,64 @@ onMounted(() => {
       {{ error }}
     </div>
 
-    <!-- Deductions Table -->
-    <div class="bg-white rounded-lg shadow overflow-hidden">
-      <table class="min-w-full divide-y divide-gray-200">
-        <thead class="bg-gray-50">
-          <tr>
-            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الموظف</th>
-            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الشهر</th>
-            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المبلغ</th>
-            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">السبب</th>
-            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">تاريخ الإضافة</th>
-          </tr>
-        </thead>
-        <tbody class="bg-white divide-y divide-gray-200">
-          <tr v-if="loading">
-            <td colspan="5" class="px-6 py-4 text-center text-gray-500">جاري التحميل...</td>
-          </tr>
-          <tr v-else-if="deductions.length === 0">
-            <td colspan="5" class="px-6 py-4 text-center text-gray-500">لا توجد خصومات مسجلة</td>
-          </tr>
-          <tr v-for="d in deductions" :key="d.id" class="hover:bg-gray-50">
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-              {{ getEmployeeName(d.employee_id) }}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-              {{ new Date(d.month_year).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) }}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-red-600">
-              {{ d.amount }} {{ d.currency }}
-            </td>
-            <td class="px-6 py-4 text-sm text-gray-500">
-              {{ d.reason }}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-              {{ new Date(d.created_at).toLocaleDateString('ar-LY') }}
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <div v-if="loading" class="text-center py-8 text-gray-500">
+      جاري التحميل...
+    </div>
+
+    <div v-else-if="deductions.length === 0" class="text-center py-8 text-gray-500 bg-white rounded shadow">
+      لا توجد خصومات مسجلة
+    </div>
+
+    <!-- Grouped Deductions Tables -->
+    <div v-else v-for="(group, currency) in groupedDeductions" :key="currency" class="mb-8">
+      <h2 class="text-xl font-bold text-gray-700 mb-3 px-2 border-r-4 border-red-500">
+        عملة: <span class="text-red-600">{{ currency }}</span>
+      </h2>
+
+      <div class="bg-white rounded-lg shadow overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الموظف</th>
+              <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الشهر</th>
+              <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المبلغ</th>
+              <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">السبب</th>
+              <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">تاريخ الإضافة</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            <tr v-for="d in group" :key="d.id" class="hover:bg-gray-50">
+              <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                {{ getEmployeeName(d.employee_id) }}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                {{ new Date(d.month_year).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) }}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-red-600">
+                {{ d.amount }} {{ d.currency }}
+              </td>
+              <td class="px-6 py-4 text-sm text-gray-500">
+                {{ d.reason }}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                {{ new Date(d.created_at).toLocaleDateString('ar-LY') }}
+              </td>
+            </tr>
+          </tbody>
+           <tfoot class="bg-gray-100 font-bold">
+              <tr>
+                <td colspan="2" class="px-6 py-3 text-center">الإجمالي ({{ currency }})</td>
+                <td class="px-6 py-3 text-red-700">{{ group.reduce((sum, d) => sum + d.amount, 0).toLocaleString() }}</td>
+                <td colspan="2"></td>
+              </tr>
+            </tfoot>
+        </table>
+      </div>
     </div>
 
     <!-- Add Deduction Modal -->
-    <div v-if="showModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <Teleport to="body">
+    <div v-if="showModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[9999]">
       <div class="bg-white rounded-lg shadow-xl w-full max-w-md">
         <div class="flex justify-between items-center p-4 border-b">
           <h3 class="text-lg font-bold">إضافة خصم جديد</h3>
@@ -197,5 +225,6 @@ onMounted(() => {
         </form>
       </div>
     </div>
+    </Teleport>
   </div>
 </template>

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import api from '@/api/client'
 import DeficitWarningModal from '@/components/DeficitWarningModal.vue'
 
@@ -8,6 +8,11 @@ const success = ref(false)
 const error = ref('')
 const showDeficitWarning = ref(false)
 const deficitWarningData = ref(null)
+
+// Salary Summary State
+const summaryLoading = ref(false)
+const salarySummary = ref(null)
+const selectedMonth = ref(new Date().toISOString().slice(0, 7)) // YYYY-MM
 
 const form = ref({
   type: 'disbursement_salary',
@@ -68,14 +73,40 @@ onMounted(async () => {
   }
 })
 
-// Auto-fill amount when employee selected
-const onEmployeeChange = () => {
-  const selectedEmployee = employees.value.find(e => e.id === form.value.employee_id)
-  if (selectedEmployee && selectedEmployee.base_salary > 0) {
-    form.value.amount = selectedEmployee.base_salary
-    // form.value.payee_payer = selectedEmployee.name // Removed auto-fill
+// Fetch Salary Summary
+const fetchSalarySummary = async () => {
+  if (!form.value.employee_id || !selectedMonth.value) {
+    salarySummary.value = null
+    return
+  }
+
+  summaryLoading.value = true
+  try {
+    const res = await api.get(`/hr/salaries?month=${selectedMonth.value}&employee_id=${form.value.employee_id}`)
+    if (res.data && res.data.length > 0) {
+      salarySummary.value = res.data[0]
+      // Auto-fill amount with Net Salary
+      if (salarySummary.value.net_salary > 0) {
+        form.value.amount = salarySummary.value.net_salary
+      }
+    } else {
+      salarySummary.value = null
+    }
+  } catch (err) {
+    console.error('Failed to fetch salary summary', err)
+  } finally {
+    summaryLoading.value = false
   }
 }
+
+// Watchers
+watch([() => form.value.employee_id, selectedMonth], () => {
+  if (form.value.employee_id) {
+    fetchSalarySummary()
+  } else {
+    salarySummary.value = null
+  }
+})
 
 const handleSubmit = async () => {
   error.value = ''
@@ -146,6 +177,7 @@ const resetForm = () => {
     reference_number: '',
     confirm_deficit: false,
   }
+  salarySummary.value = null
 }
 </script>
 
@@ -153,7 +185,7 @@ const resetForm = () => {
   <div>
     <h1 class="text-3xl font-bold mb-6">صرف مرتبات</h1>
 
-    <div class="card max-w-2xl">
+    <div class="card max-w-4xl">
       <div v-if="success" class="bg-surplus-light border border-surplus text-surplus-dark px-4 py-3 rounded-lg mb-4">
         ✅ تمت العملية بنجاح
       </div>
@@ -162,51 +194,87 @@ const resetForm = () => {
         ❌ {{ error }}
       </div>
 
-      <form @submit.prevent="handleSubmit" class="space-y-4">
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">الموظف <span class="text-deficit">*</span></label>
-          <select v-model="form.employee_id" @change="onEmployeeChange" required class="input-field">
-            <option value="">اختر الموظف...</option>
-            <option v-for="e in employees" :key="e.id" :value="e.id">
-              {{ e.employee_number }} - {{ e.name }}
-              <template v-if="e.base_salary > 0"> (الراتب: {{ e.base_salary }})</template>
-            </option>
-          </select>
+      <form @submit.prevent="handleSubmit" class="space-y-6">
+        
+        <!-- Employee & Month Selection Row -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">الشهر (لحساب المستحقات)</label>
+              <input type="month" v-model="selectedMonth" class="input-field" />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">الموظف <span class="text-deficit">*</span></label>
+              <select v-model="form.employee_id" required class="input-field">
+                <option value="">اختر الموظف...</option>
+                <option v-for="e in employees" :key="e.id" :value="e.id">
+                  {{ e.employee_number }} - {{ e.name }}
+                </option>
+              </select>
+            </div>
         </div>
 
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">المبلغ <span class="text-deficit">*</span></label>
-          <input v-model.number="form.amount" type="number" step="0.01" required class="input-field" />
+        <!-- Mini Summary Table -->
+        <div v-if="summaryLoading" class="text-center py-4 text-gray-500">جاري احتساب المستحقات...</div>
+        <div v-else-if="salarySummary" class="bg-gray-50 p-4 rounded-lg border border-gray-200">
+            <h3 class="text-sm font-bold text-gray-700 mb-3">ملخص مستحقات شهر {{ selectedMonth }}:</h3>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                <div class="bg-white p-2 rounded shadow-sm">
+                    <div class="text-xs text-gray-500">الراتب الأساسي</div>
+                    <div class="font-bold text-gray-800">{{ salarySummary.base_salary.toLocaleString() }}</div>
+                </div>
+                <div class="bg-white p-2 rounded shadow-sm border-r-2 border-green-400">
+                    <div class="text-xs text-gray-500">(+) المكافآت</div>
+                    <div class="font-bold text-green-600">{{ salarySummary.total_bonuses.toLocaleString() }}</div>
+                </div>
+                <div class="bg-white p-2 rounded shadow-sm border-r-2 border-red-400">
+                    <div class="text-xs text-gray-500">(-) الخصومات</div>
+                    <div class="font-bold text-red-600">{{ salarySummary.total_deductions.toLocaleString() }}</div>
+                </div>
+                <div class="bg-white p-2 rounded shadow-sm ring-2 ring-blue-100">
+                    <div class="text-xs text-gray-500">صافي الراتب</div>
+                    <div class="font-bold text-blue-800 text-lg">{{ salarySummary.net_salary.toLocaleString() }}</div>
+                </div>
+            </div>
         </div>
 
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">طريقة الدفع <span class="text-deficit">*</span></label>
-          <select v-model="form.container_id" required class="input-field">
-            <option value="">اختر...</option>
-            <optgroup label="نقدي">
-              <option v-for="c in containers.filter(x => x.type === 'cash')" :key="c.id" :value="c.id">{{ c.name }} ({{ c.currency }})</option>
-            </optgroup>
-            <optgroup label="🏦 مصرفي (بنك)">
-              <option v-for="c in containers.filter(x => x.type === 'bank')" :key="c.id" :value="c.id">{{ c.name }} ({{ c.currency }})</option>
-            </optgroup>
-          </select>
-        </div>
+        <!-- Payment Details -->
+        <div class="border-t pt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">المبلغ المراد صرفه <span class="text-deficit">*</span></label>
+            <input v-model.number="form.amount" type="number" step="0.01" required class="input-field font-bold" />
+            <p class="text-xs text-gray-500 mt-1">يتم تعبئته تلقائياً بصافي الراتب</p>
+            </div>
 
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">المشروع <span class="text-deficit">*</span></label>
-          <select v-model="form.project_id" required class="input-field">
-            <option value="">اختر...</option>
-            <option v-for="p in projects.filter(proj => {
-              if (!form.container_id) return true;
-              const container = containers.find(c => c.id === form.container_id);
-              return !container || (proj.currency || 'LYD') === container.currency;
-            })" :key="p.id" :value="p.id">{{ p.code }} - {{ p.name }}</option>
-          </select>
-        </div>
+            <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">طريقة الدفع <span class="text-deficit">*</span></label>
+            <select v-model="form.container_id" required class="input-field">
+                <option value="">اختر...</option>
+                <optgroup label="نقدي">
+                <option v-for="c in containers.filter(x => x.type === 'cash')" :key="c.id" :value="c.id">{{ c.name }} ({{ c.currency }})</option>
+                </optgroup>
+                <optgroup label="🏦 مصرفي (بنك)">
+                <option v-for="c in containers.filter(x => x.type === 'bank')" :key="c.id" :value="c.id">{{ c.name }} ({{ c.currency }})</option>
+                </optgroup>
+            </select>
+            </div>
 
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">ملاحظات إضافية</label>
-          <input v-model="form.payee_payer" type="text" class="input-field" placeholder="أي ملاحظات أخرى..." />
+            <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">المشروع <span class="text-deficit">*</span></label>
+            <select v-model="form.project_id" required class="input-field">
+                <option value="">اختر...</option>
+                <option v-for="p in projects.filter(proj => {
+                if (!form.container_id) return true;
+                const container = containers.find(c => c.id === form.container_id);
+                return !container || (proj.currency || 'LYD') === container.currency;
+                })" :key="p.id" :value="p.id">{{ p.code }} - {{ p.name }}</option>
+            </select>
+            </div>
+
+            <div>
+            <label class="block text-sm font-medium text-gray-700 mb-2">ملاحظات إضافية</label>
+            <input v-model="form.payee_payer" type="text" class="input-field" placeholder="أي ملاحظات أخرى..." />
+            </div>
         </div>
 
         <div>
@@ -216,7 +284,7 @@ const resetForm = () => {
 
         <div class="flex gap-3">
           <button type="submit" :disabled="loading" class="btn-primary disabled:opacity-50">
-            {{ loading ? 'جاري الحفظ...' : 'حفظ' }}
+            {{ loading ? 'جاري الحفظ...' : 'حفظ وصرف' }}
           </button>
           <button type="button" @click="resetForm" class="btn-secondary">إعادة تعيين</button>
         </div>

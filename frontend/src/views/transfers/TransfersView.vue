@@ -30,13 +30,29 @@ onMounted(async () => {
         name: c.name_ar || c.name,
         type: c.type,
         currency: c.currency,
-        balance: c.balance
+        balance: c.balance,
+        bank_name: c.bank_name_ar || c.bank_name
       }))
     }
   } catch (err) {
     console.error('Failed to load containers:', err)
     error.value = 'فشل في تحميل الحسابات'
   }
+})
+
+// Computed helper for selected containers
+const selectedSource = computed(() => 
+  containers.value.find(c => c.id === form.value.from_container_id)
+)
+
+const selectedDest = computed(() => 
+  containers.value.find(c => c.id === form.value.to_container_id)
+)
+
+// Computed projected balance for destination
+const projectedDestBalance = computed(() => {
+  if (!selectedDest.value || !form.value.amount) return null
+  return selectedDest.value.balance + parseFloat(form.value.amount)
 })
 
 // Filter containers based on source selection
@@ -87,7 +103,7 @@ const handleSubmit = async () => {
       window.open(receiptUrl, '_blank')
     }
     
-    // Update container balances locally
+    // Update container balances locally (OPTIMISTIC UI UPDATE)
     const sourceIdx = containers.value.findIndex(c => c.id === form.value.from_container_id)
     const destIdx = containers.value.findIndex(c => c.id === form.value.to_container_id)
     if (sourceIdx !== -1) {
@@ -115,13 +131,6 @@ const resetForm = () => {
     reference_number: '',
   }
 }
-
-// Get container display info
-const getContainerInfo = (containerId) => {
-  const container = containers.value.find(c => c.id === containerId)
-  if (!container) return ''
-  return `${container.name} (${container.currency}) - رصيد: ${container.balance.toFixed(2)}`
-}
 </script>
 
 <template>
@@ -138,6 +147,7 @@ const getContainerInfo = (containerId) => {
       </div>
 
       <form @submit.prevent="handleSubmit" class="space-y-4">
+        <!-- Source Account -->
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-2">
             من حساب (المصدر) <span class="text-deficit">*</span>
@@ -150,26 +160,35 @@ const getContainerInfo = (containerId) => {
           >
             <option value="">اختر الحساب المصدر...</option>
             <optgroup label="نقدي (كاش)">
-              <option 
-                v-for="container in containers.filter(c => c.type === 'cash')" 
-                :key="container.id" 
-                :value="container.id"
-              >
-                {{ container.name }} ({{ container.currency }}) - رصيد: {{ container.balance.toFixed(2) }}
+              <option v-for="c in containers.filter(c => c.type === 'cash')" :key="c.id" :value="c.id">
+                {{ c.name }} ({{ c.currency }})
               </option>
             </optgroup>
             <optgroup label="مصرفي (بنك)">
-              <option 
-                v-for="container in containers.filter(c => c.type === 'bank')" 
-                :key="container.id" 
-                :value="container.id"
-              >
-                {{ container.name }} ({{ container.currency }}) - رصيد: {{ container.balance.toFixed(2) }}
+              <option v-for="c in containers.filter(c => c.type === 'bank')" :key="c.id" :value="c.id">
+                {{ c.name }} ({{ c.currency }})
               </option>
             </optgroup>
           </select>
+          
+          <!-- Detailed Source Info -->
+          <div v-if="selectedSource" class="mt-2 bg-blue-50 p-3 rounded border border-blue-100 text-sm grid grid-cols-2 gap-2">
+            <div>
+              <span class="text-gray-500 block text-xs">اسم المصرف/الخزينة:</span>
+              <span class="font-bold text-gray-800">{{ selectedSource.bank_name || selectedSource.name }}</span>
+            </div>
+            <div>
+              <span class="text-gray-500 block text-xs">الرصيد الحالي:</span>
+              <span :class="selectedSource.balance < 0 ? 'text-red-600' : 'text-green-600'" class="font-bold">
+                {{ selectedSource.balance.toLocaleString() }} {{ selectedSource.currency }}
+                <span v-if="selectedSource.balance < 0" class="text-xs mr-1 bg-red-100 text-red-800 px-1 rounded">(عجز)</span>
+              </span>
+            </div>
+
+          </div>
         </div>
 
+        <!-- Destination Account -->
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-2">
             إلى حساب (الوجهة) <span class="text-deficit">*</span>
@@ -183,101 +202,66 @@ const getContainerInfo = (containerId) => {
             <option value="">
               {{ form.from_container_id ? 'اختر الحساب الوجهة...' : 'اختر الحساب المصدر أولاً' }}
             </option>
-            <optgroup label="نقدي (كاش)" v-if="availableDestinations.filter(c => c.type === 'cash').length > 0">
-              <option 
-                v-for="container in availableDestinations.filter(c => c.type === 'cash')" 
-                :key="container.id" 
-                :value="container.id"
-              >
-                {{ container.name }} ({{ container.currency }}) - رصيد: {{ container.balance.toFixed(2) }}
-              </option>
-            </optgroup>
-            <optgroup label="مصرفي (بنك)" v-if="availableDestinations.filter(c => c.type === 'bank').length > 0">
-              <option 
-                v-for="container in availableDestinations.filter(c => c.type === 'bank')" 
-                :key="container.id" 
-                :value="container.id"
-              >
-                {{ container.name }} ({{ container.currency }}) - رصيد: {{ container.balance.toFixed(2) }}
-              </option>
-            </optgroup>
+            <option v-for="c in availableDestinations" :key="c.id" :value="c.id">
+              {{ c.name }} ({{ c.currency }})
+            </option>
           </select>
-          <p class="text-sm text-gray-500 mt-1">
-            ملاحظة: يمكن التحويل فقط بين حسابات بنفس العملة
-          </p>
+          
+          <!-- Detailed Destination Info -->
+          <div v-if="selectedDest" class="mt-2 bg-green-50 p-3 rounded border border-green-100 text-sm grid grid-cols-2 gap-2">
+             <div>
+              <span class="text-gray-500 block text-xs">اسم المصرف/الخزينة:</span>
+              <span class="font-bold text-gray-800">{{ selectedDest.bank_name || selectedDest.name }}</span>
+            </div>
+            <div>
+              <span class="text-gray-500 block text-xs">الرصيد الحالي:</span>
+              <span :class="selectedDest.balance < 0 ? 'text-red-600' : 'text-green-600'" class="font-bold">
+                {{ selectedDest.balance.toLocaleString() }} {{ selectedDest.currency }}
+                <span v-if="selectedDest.balance < 0" class="text-xs mr-1 bg-red-100 text-red-800 px-1 rounded">(عجز)</span>
+              </span>
+            </div>
+
+          </div>
         </div>
 
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-2">
             المبلغ <span class="text-deficit">*</span>
           </label>
-          <input 
-            v-model.number="form.amount" 
-            type="number" 
-            step="0.01" 
-            required 
-            class="input-field" 
-            placeholder="0.00" 
-          />
+          <input v-model.number="form.amount" type="number" step="0.01" required class="input-field" placeholder="0.00" />
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">
-            العملة
-          </label>
-          <input 
-            :value="form.currency" 
-            type="text" 
-            readonly 
-            disabled
-            class="input-field bg-gray-100 cursor-not-allowed" 
-          />
-          <p class="text-sm text-gray-500 mt-1">
-            العملة تحدد تلقائياً حسب الحساب المصدر
+          <label class="block text-sm font-medium text-gray-700 mb-2">البيان <span class="text-deficit">*</span></label>
+          <textarea v-model="form.description" required rows="3" class="input-field" placeholder="وصف التحويل..."></textarea>
+        </div>
+
+        <div>
+           <label class="block text-sm font-medium text-gray-700 mb-2">رقم المرجع</label>
+           <input v-model="form.reference_number" type="text" class="input-field" placeholder="رقم الإشعار أو المرجع (اختياري)" />
+        </div>
+
+        <!-- Transfer Summary Box -->
+        <div v-if="form.amount && selectedSource && selectedDest" class="bg-gradient-to-l from-blue-50 to-white p-4 rounded-lg border-r-4 border-blue-500 shadow-sm my-4">
+          <h3 class="font-bold text-blue-800 mb-2 text-sm">ملخص العملية قبل التنفيذ:</h3>
+          <p class="text-sm text-gray-700 leading-relaxed">
+            سيتم تحويل مبلغ <span class="font-bold text-blue-700">{{ form.amount.toLocaleString() }} {{ form.currency }}</span>
+            من <span class="font-bold">{{ selectedSource.name }}</span>
+            إلى <span class="font-bold">{{ selectedDest.name }}</span>.
           </p>
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">
-            البيان <span class="text-deficit">*</span>
-          </label>
-          <textarea 
-            v-model="form.description" 
-            required 
-            rows="3" 
-            class="input-field" 
-            placeholder="وصف التحويل..."
-          ></textarea>
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-2">
-            رقم المرجع
-          </label>
-          <input 
-            v-model="form.reference_number" 
-            type="text" 
-            class="input-field" 
-            placeholder="رقم الإشعار أو المرجع (اختياري)" 
-          />
+          <div class="mt-2 text-sm pt-2 border-t border-blue-100">
+             <span class="text-gray-500">الرصيد المتوقع في {{ selectedDest.name }}:</span>
+             <span class="font-bold text-green-700 mr-2">{{ projectedDestBalance?.toLocaleString() }} {{ form.currency }}</span>
+             <span class="text-xs text-gray-400 mr-1">(زيادة +{{ form.amount }})</span>
+          </div>
         </div>
 
         <div class="flex gap-3">
-          <button 
-            type="submit" 
-            :disabled="loading" 
-            class="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
-          >
+          <button type="submit" :disabled="loading" class="btn-primary disabled:opacity-50 disabled:cursor-not-allowed w-full md:w-auto">
             <span v-if="loading">جاري التحويل...</span>
-            <span v-else>تنفيذ التحويل</span>
+            <span v-else>تنفيذ التحويل 💸</span>
           </button>
-          <button 
-            type="button" 
-            @click="resetForm" 
-            class="btn-secondary"
-          >
-            إعادة تعيين
-          </button>
+          <button type="button" @click="resetForm" class="btn-secondary">إعادة تعيين</button>
         </div>
       </form>
     </div>

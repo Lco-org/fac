@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import api from '@/api/client' 
 import { useAuthStore } from '@/stores/auth'
 
@@ -32,7 +32,7 @@ const fetchBonuses = async () => {
   loading.value = true
   try {
     const res = await api.get('/hr/bonuses')
-    bonuses.value = res.data
+    bonuses.value = res.data || []
   } catch (err) {
     error.value = 'Failed to load bonuses'
     console.error(err)
@@ -40,6 +40,18 @@ const fetchBonuses = async () => {
     loading.value = false
   }
 }
+
+const groupedBonuses = computed(() => {
+  const groups = {}
+  bonuses.value.forEach(b => {
+    const currency = b.currency || 'LYD'
+    if (!groups[currency]) {
+      groups[currency] = []
+    }
+    groups[currency].push(b)
+  })
+  return groups
+})
 
 const handleSubmit = async () => {
   if (!form.value.employee_id || !form.value.amount || !form.value.reason) {
@@ -104,48 +116,64 @@ onMounted(() => {
       {{ error }}
     </div>
 
-    <!-- Bonuses Table -->
-    <div class="bg-white rounded-lg shadow overflow-hidden">
-      <table class="min-w-full divide-y divide-gray-200">
-        <thead class="bg-gray-50">
-          <tr>
-            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الموظف</th>
-            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الشهر</th>
-            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المبلغ</th>
-            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">السبب</th>
-            <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">تاريخ الإضافة</th>
-          </tr>
-        </thead>
-        <tbody class="bg-white divide-y divide-gray-200">
-          <tr v-if="loading">
-            <td colspan="5" class="px-6 py-4 text-center text-gray-500">جاري التحميل...</td>
-          </tr>
-          <tr v-else-if="bonuses.length === 0">
-            <td colspan="5" class="px-6 py-4 text-center text-gray-500">لا توجد مكافآت مسجلة</td>
-          </tr>
-          <tr v-for="b in bonuses" :key="b.id" class="hover:bg-gray-50">
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-              {{ getEmployeeName(b.employee_id) }}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-              {{ new Date(b.month_year).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) }}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-green-600">
-              {{ b.amount }} {{ b.currency }}
-            </td>
-            <td class="px-6 py-4 text-sm text-gray-500">
-              {{ b.reason }}
-            </td>
-            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-              {{ new Date(b.created_at).toLocaleDateString('ar-LY') }}
-            </td>
-          </tr>
-        </tbody>
-      </table>
+    <div v-if="loading" class="text-center py-8 text-gray-500">
+      جاري التحميل...
+    </div>
+
+    <div v-else-if="bonuses.length === 0" class="text-center py-8 text-gray-500 bg-white rounded shadow">
+      لا توجد مكافآت مسجلة
+    </div>
+
+    <!-- Grouped Bonuses Tables -->
+    <div v-else v-for="(group, currency) in groupedBonuses" :key="currency" class="mb-8">
+      <h2 class="text-xl font-bold text-gray-700 mb-3 px-2 border-r-4 border-green-500">
+        عملة: <span class="text-green-600">{{ currency }}</span>
+      </h2>
+
+      <div class="bg-white rounded-lg shadow overflow-hidden">
+        <table class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الموظف</th>
+              <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الشهر</th>
+              <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">المبلغ</th>
+              <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">السبب</th>
+              <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">تاريخ الإضافة</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white divide-y divide-gray-200">
+            <tr v-for="b in group" :key="b.id" class="hover:bg-gray-50">
+              <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                {{ getEmployeeName(b.employee_id) }}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                {{ new Date(b.month_year).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) }}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm font-bold text-green-600">
+                {{ b.amount }} {{ b.currency }}
+              </td>
+              <td class="px-6 py-4 text-sm text-gray-500">
+                {{ b.reason }}
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                {{ new Date(b.created_at).toLocaleDateString('ar-LY') }}
+              </td>
+            </tr>
+          </tbody>
+          <tfoot class="bg-gray-100 font-bold">
+            <tr>
+              <td colspan="2" class="px-6 py-3 text-center">الإجمالي ({{ currency }})</td>
+              <td class="px-6 py-3 text-green-700">{{ group.reduce((sum, b) => sum + b.amount, 0).toLocaleString() }}</td>
+              <td colspan="2"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
     </div>
 
     <!-- Add Bonus Modal -->
-    <div v-if="showModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <Teleport to="body">
+    <div v-if="showModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[9999]">
       <div class="bg-white rounded-lg shadow-xl w-full max-w-md">
         <div class="flex justify-between items-center p-4 border-b">
           <h3 class="text-lg font-bold">إضافة مكافأة جديدة</h3>
@@ -196,5 +224,6 @@ onMounted(() => {
         </form>
       </div>
     </div>
+    </Teleport>
   </div>
 </template>

@@ -58,34 +58,45 @@ const isIncome = computed(() => {
   return type === 'income_grant' || type === 'income_donation'
 })
 
-// Get detailed transaction description parts
-const transactionDescriptionParts = computed(() => {
-  if (!receiptData.value) return []
+  // Get transaction type in Arabic text only
+  const getTransactionTypeText = computed(() => {
+    if (!receiptData.value) return ''
+    const t = receiptData.value.transaction
+    if (t.type === 'income_grant') return 'منحة'
+    else if (t.type === 'income_donation') return 'تبرع'
+    else if (t.type === 'disbursement_custody') return 'عهدة'
+    else if (t.type === 'disbursement_salary') return 'راتب'
+    else if (t.type === 'disbursement_operational') return 'تشغيلية'
+    else if (t.type === 'disbursement_donation') return 'تبرعات'
+    else if (t.type === 'disbursement_bonus') return 'مكافأة'
+    else if (t.type === 'procurement') return 'شراء'
+    else if (t.type === 'transfer') return 'تحويل'
+    return 'عام'
+  })
   
-  const t = receiptData.value.transaction
-  const c = receiptData.value.container
-  const p = receiptData.value.project
-  
-  const containerType = c.type === 'cash' ? 'نقدي' : 'مصرفي'
-  const containerName = c.name_ar || c.name
-  const projectName = p.name_ar || p.name
-  
-  let beneficiary = t.payee_payer_ar || t.payee_payer
-  if (receiptData.value.employee) {
-    beneficiary = receiptData.value.employee.full_name_ar || receiptData.value.employee.full_name
-  } else if (receiptData.value.member) {
-    beneficiary = receiptData.value.member.full_name_ar || receiptData.value.member.full_name
-  }
-  
-  // Get transaction type in Arabic
-  let typeText = ''
-  if (t.type === 'income_grant') typeText = 'منحة'
-  else if (t.type === 'income_donation') typeText = 'تبرع'
-  else if (t.type === 'disbursement_custody') typeText = 'عهدة'
-  else if (t.type === 'disbursement_salary') typeText = 'راتب'
-  else if (t.type === 'disbursement_operational') typeText = 'صرف تشغيلي'
-  
-  const parts = []
+  // Get detailed transaction description parts
+  const transactionDescriptionParts = computed(() => {
+    if (!receiptData.value) return []
+    
+    const t = receiptData.value.transaction
+    const c = receiptData.value.container
+    const p = receiptData.value.project
+    
+    const containerType = c.type === 'cash' ? 'نقدي' : 'مصرفي'
+    const containerName = c.name_ar || c.name
+    const projectName = p.name_ar || p.name
+    
+    let beneficiary = t.payee_payer_ar || t.payee_payer
+    if (receiptData.value.employee) {
+      beneficiary = receiptData.value.employee.full_name_ar || receiptData.value.employee.full_name
+    } else if (receiptData.value.member) {
+      beneficiary = receiptData.value.member.full_name_ar || receiptData.value.member.full_name
+    }
+    
+    // Use the computed property
+    let typeText = getTransactionTypeText.value
+    
+    const parts = []
   
   if (isIncome.value) {
     parts.push(`قبض مبلغ (${typeText})`)
@@ -121,42 +132,88 @@ const transactionDescriptionParts = computed(() => {
 
 // Convert number to Arabic words
 const numberToArabicWords = (num) => {
-  if (num === 0) return 'صفر'
+  if (num === 0) return { integer: 'صفر', decimal: 0 }
   
   const ones = ['', 'واحد', 'اثنان', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة']
   const tens = ['', 'عشرة', 'عشرون', 'ثلاثون', 'أربعون', 'خمسون', 'ستون', 'سبعون', 'ثمانون', 'تسعون']
   const hundreds = ['', 'مائة', 'مئتان', 'ثلاثمائة', 'أربعمائة', 'خمسمائة', 'ستمائة', 'سبعمائة', 'ثمانمائة', 'تسعمائة']
-  
+
+  const convertThreeDigits = (n) => {
+    let s = ''
+    // Hundreds
+    let h = Math.floor(n / 100)
+    let rem = n % 100
+    if (h > 0) {
+      s += hundreds[h]
+      if (rem > 0) s += ' و'
+    }
+    
+    // Tens and Ones
+    if (rem > 0) {
+      if (rem < 10) {
+        s += ones[rem]
+      } else if (rem === 10) {
+        s += 'عشرة'
+      } else if (rem === 11) {
+        s += 'أحد عشر'
+      } else if (rem === 12) {
+        s += 'اثنا عشر'
+      } else if (rem < 20) {
+        s += ones[rem % 10] + ' عشر'
+      } else { // 20-99
+        let t = Math.floor(rem / 10)
+        let o = rem % 10
+        if (o > 0) s += ones[o] + ' و'
+        s += tens[t]
+      }
+    }
+    return s
+  }
+
   const int = Math.floor(num)
   const decimal = Math.round((num - int) * 100)
   
   let result = ''
+  let remaining = int
+  
+  // Billions
+  let bil = Math.floor(remaining / 1000000000)
+  remaining = remaining % 1000000000
+  if (bil > 0) {
+    if (bil === 1) result += 'مليار'
+    else if (bil === 2) result += 'ملياران'
+    else if (bil <= 10) result += convertThreeDigits(bil) + ' مليارات'
+    else result += convertThreeDigits(bil) + ' مليار'
+    if (remaining > 0) result += ' و'
+  }
+
+  // Millions
+  let mil = Math.floor(remaining / 1000000)
+  remaining = remaining % 1000000
+  if (mil > 0) {
+    if (mil === 1) result += 'مليون'
+    else if (mil === 2) result += 'مليونان'
+    else if (mil <= 10) result += convertThreeDigits(mil) + ' ملايين'
+    else result += convertThreeDigits(mil) + ' مليون'
+    if (remaining > 0) result += ' و'
+  }
   
   // Thousands
-  if (int >= 1000) {
-    const th = Math.floor(int / 1000)
-    if (th === 1) result += 'ألف '
-    else if (th === 2) result += 'ألفان '
-    else if (th <= 10) result += ones[th] + ' آلاف '
-    else result += th + ' ألف '
+  let th = Math.floor(remaining / 1000)
+  remaining = remaining % 1000
+  if (th > 0) {
+    if (th === 1) result += 'ألف'
+    else if (th === 2) result += 'ألفان'
+    else if (th <= 10) result += convertThreeDigits(th) + ' آلاف'
+    else result += convertThreeDigits(th) + ' ألف'
+    if (remaining > 0) result += ' و'
   }
   
-  // Hundreds
-  const h = Math.floor((int % 1000) / 100)
-  if (h > 0) result += hundreds[h] + ' '
-  
-  // Tens and ones
-  const remainder = int % 100
-  if (remainder >= 20) {
-    result += tens[Math.floor(remainder / 10)] + ' '
-    if (remainder % 10 > 0) result += ones[remainder % 10] + ' '
-  } else if (remainder >= 10) {
-    result += tens[1] + ' '
-    if (remainder > 10) result += ones[remainder - 10] + ' '
-  } else if (remainder > 0) {
-    result += ones[remainder] + ' '
+  // Hundreds/Tens/Ones
+  if (remaining > 0) {
+    result += convertThreeDigits(remaining)
   }
-  
+
   return { integer: result.trim() || 'صفر', decimal: decimal }
 }
 
@@ -315,107 +372,133 @@ const formatTime = (date) => {
       <div id="receipt-content" class="receipt-content">
         <!-- Header -->
         <div class="receipt-header">
-          <div class="org-logo">
-            <div class="logo-placeholder">LOGO</div>
-          </div>
           <div class="org-info">
             <h1>{{ orgInfo.nameAr }}</h1>
             <p class="org-contact">{{ orgInfo.phone }} | {{ orgInfo.email }}</p>
             <p class="org-address">{{ orgInfo.address }}</p>
           </div>
-          <div class="receipt-type" :class="{ 'income-type': isIncome, 'expense-type': !isIncome }">
-            <h2>{{ getTransactionTypeLabel }}</h2>
+          <div class="org-logo">
+            <div class="logo-placeholder">LOGO</div>
           </div>
         </div>
 
         <div class="divider"></div>
 
-        <!-- Transaction header info -->
-        <div class="transaction-header">
-          <div class="header-row">
-            <div class="header-item">
-              <span class="label">رقم العملية:</span>
-              <span class="value-large">{{ receiptData.transaction.transaction_number }}</span>
+        <!-- Sub Header -->
+        <div class="sub-header">
+          <div class="receipt-type-label">
+            <h2>{{ getTransactionTypeLabel }}</h2>
+          </div>
+          <div class="receipt-meta">
+            <div class="meta-row">
+              <span class="meta-label">رقم العملية:</span>
+              <span class="meta-value">{{ receiptData.transaction.transaction_number }}</span>
             </div>
-            <div class="header-item">
-              <span class="label">التاريخ:</span>
-              <span class="value-large">{{ formatDate(receiptData.transaction.transaction_date) }}</span>
+            <div class="meta-row">
+              <span class="meta-label">التاريخ:</span>
+              <span class="meta-value">{{ formatDate(receiptData.transaction.transaction_date) }}</span>
             </div>
           </div>
         </div>
 
-        <!-- Detailed transaction description -->
-        <div class="transaction-details-box">
-          <div class="details-line" v-for="(line, index) in transactionDescriptionParts" :key="index">
-            {{ line }}
+        <!-- Centered Amount Section -->
+        <div class="centered-amount-section">
+          <div class="amount-label-large">
+            {{ isIncome ? 'قيمة القبض' : (receiptData.transaction.type === 'transfer' ? 'مبلغ التحويل' : 'قيمة الصرف') }} 
+            <!-- Add specific type text if needed, though header already has it. User asked for "Payment Amount (Type)" -->
+            <span class="amount-type-suffix">({{ getTransactionTypeText }})</span>
+          </div>
+          <div class="amount-value-large">
+            {{ receiptData.transaction.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}
+            <span class="currency-symbol">{{ getCurrencyInfo(receiptData.transaction.currency).symbol }}</span>
           </div>
         </div>
 
-        <!-- Amount section -->
-        <div class="amount-section">
-          <div class="amount-box">
-            <div class="amount-value">
-              {{ receiptData.transaction.amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}
-              {{ getCurrencyInfo(receiptData.transaction.currency).symbol }}
-            </div>
-            <div class="amount-words">{{ amountInWords }}</div>
+        <!-- Amount in Words (Compact & Centered) -->
+        <div class="amount-words-centered">
+          <span class="words-label">{{ isIncome ? 'استلمنا منكم مبلغ:' : 'صرف له مبلغ:' }}</span>
+          <span class="words-value">{{ amountInWords }}</span>
+        </div>
+
+        <!-- Main Data Grid (Revised Logic) -->
+        <div class="main-data-grid three-col">
+          <!-- Column 1: Financial Account (The Org's Side) -->
+          <div class="grid-cell">
+            <span class="cell-label">{{ receiptData.transaction.type === 'transfer' ? 'من حساب:' : (isIncome ? 'إلى حساب (الخزينة/المصرف):' : 'من حساب (الخزينة/المصرف):') }}</span>
+            <span class="cell-value">
+              {{ receiptData.container.name_ar || receiptData.container.name }}
+              <span class="sub-text">({{ receiptData.container.type === 'cash' ? 'نقدي' : 'مصرفي' }})</span>
+            </span>
+          </div>
+          
+          <!-- Column 2: The Other Party (Beneficiary or Source) -->
+          <div class="grid-cell">
+            <span class="cell-label">
+              {{ isIncome ? 'استلمنا من:' : 'صرف لأمر:' }}
+            </span>
+            <span class="cell-value">
+              <!-- Priority: Employee -> Member -> PayeePayer (External) -->
+              <template v-if="receiptData.employee">{{ receiptData.employee.full_name_ar || receiptData.employee.full_name }} <span class="sub-text">(موظف)</span></template>
+              <template v-else-if="receiptData.member">{{ receiptData.member.full_name_ar || receiptData.member.full_name }} <span class="sub-text">(عضو)</span></template>
+              <template v-else-if="receiptData.transaction.payee_payer_ar || receiptData.transaction.payee_payer">{{ receiptData.transaction.payee_payer_ar || receiptData.transaction.payee_payer }}</template>
+              <template v-else>-</template>
+            </span>
+          </div>
+
+          <!-- Column 3: Project / Context -->
+          <div class="grid-cell">
+            <span class="cell-label">لصالح (المشروع) : </span>
+            <span class="cell-value">
+              {{ receiptData.project.name_ar || receiptData.project.name }}
+            </span>
           </div>
         </div>
 
         <!-- Statement/Description -->
         <div class="statement-section" v-if="receiptData.transaction.description_ar || receiptData.transaction.description">
-          <div class="statement-label">البيان:</div>
+          <div class="statement-label">وذلك مقابل (البيان):</div>
           <div class="statement-text">{{ receiptData.transaction.description_ar || receiptData.transaction.description }}</div>
         </div>
 
-        <!-- Additional details grid -->
-        <div class="details-grid">
-          <div class="detail-row" v-if="receiptData.employee || receiptData.member">
-            <span class="detail-label">{{ isIncome ? 'المانح/الدافع:' : 'المستفيد:' }}</span>
-            <span class="detail-value" v-if="receiptData.employee">{{ receiptData.employee.full_name_ar || receiptData.employee.full_name }}</span>
-            <span class="detail-value" v-else-if="receiptData.member">{{ receiptData.member.full_name_ar || receiptData.member.full_name }}</span>
-          </div>
-
-          <div class="detail-row" v-if="receiptData.transaction.payee_payer_ar || receiptData.transaction.payee_payer">
-            <span class="detail-label">ملاحظات إضافية:</span>
-            <span class="detail-value">{{ receiptData.transaction.payee_payer_ar || receiptData.transaction.payee_payer }}</span>
-          </div>
-
-          <div class="detail-row" v-if="receiptData.transaction.reference_number">
-            <span class="detail-label">رقم المرجع/الشيك:</span>
-            <span class="detail-value">{{ receiptData.transaction.reference_number }}</span>
-          </div>
+        <!-- Optional: Cheque/Reference Info if exists -->
+        <div class="ref-section" v-if="receiptData.transaction.reference_number">
+          <span class="ref-label">رقم المرجع / الصك:</span>
+          <span class="ref-value">{{ receiptData.transaction.reference_number }}</span>
         </div>
 
         <div class="divider"></div>
 
-        <!-- Signatures -->
+        <!-- Signatures (Improved) -->
         <div class="signatures-section">
           <div class="signature-box">
-            <div class="signature-label">المحاسب</div>
             <div class="signature-line"></div>
+            <div class="signature-label">المستلم</div>
+          </div>
+          <div class="signature-box">
+            <div class="signature-line"></div>
+            <div class="signature-label">المحاسب</div>
             <div class="signature-name">{{ receiptData.created_by_user.full_name_ar || receiptData.created_by_user.full_name }}</div>
           </div>
           <div class="signature-box">
-            <div class="signature-label">المدير المالي</div>
             <div class="signature-line"></div>
+            <div class="signature-label">المدير المالي</div>
           </div>
           <div class="signature-box">
-            <div class="signature-label">المدير العام</div>
             <div class="signature-line"></div>
+            <div class="signature-label">المدير العام</div>
           </div>
         </div>
 
         <!-- Footer -->
         <div class="receipt-footer">
-          <p>تم إنشاء هذا الإيصال في: {{ formatDate(receiptData.transaction.created_at) }} - {{ formatTime(receiptData.transaction.created_at) }}</p>
+          <p>حرر بواسطة النظام في: {{ formatDate(receiptData.transaction.created_at) }} - {{ formatTime(receiptData.transaction.created_at) }}</p>
         </div>
       </div>
     </div>
   </div>
 </template>
 <style scoped>
-/* General page styles */
+/* Keep existing container styles ... */
 .receipt-page {
   min-height: 100vh;
   background-color: #f3f4f6;
@@ -427,374 +510,291 @@ const formatTime = (date) => {
   align-items: center;
 }
 
-.loading-container,
-.error-container {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 60vh;
-  flex-direction: column;
-}
-
-.loading-spinner {
-  width: 50px;
-  height: 50px;
-  border: 4px solid #e0e0e0;
-  border-top-color: #3b82f6;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.error-message {
-  text-align: center;
-  padding: 40px;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-}
-
-/* Action buttons */
-.action-buttons {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-}
-
-.action-buttons button {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 600;
-  transition: all 0.3s;
-}
-
-.btn-primary {
-  background: #3b82f6;
-  color: white;
-}
-
-.btn-primary:hover {
-  background: #2563eb;
-}
-
-.btn-success {
-  background: #10b981;
-  color: white;
-}
-
-.btn-success:hover {
-  background: #059669;
-}
-
-.btn-info {
-  background: #8b5cf6;
-  color: white;
-}
-
-.btn-info:hover {
-  background: #7c3aed;
-}
-
-.btn-secondary {
-  background: #6b7280;
-  color: white;
-}
-
-.btn-secondary:hover {
-  background: #4b5563;
-}
-
-/* Receipt wrapper */
-.receipt-wrapper {
-  max-width: 210mm;
-  margin: 0 auto;
-}
-
-/* Receipt content - A5 landscape */
 .receipt-content {
   width: 210mm;
   min-height: 148mm;
   background: white;
   padding: 15mm;
-  margin: 0 auto;
   box-shadow: 0 4px 16px rgba(0,0,0,0.1);
   border-radius: 8px;
 }
 
-/* Header */
+/* Header Adjustments */
 .receipt-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
+  align-items: center; /* Center Vertically */
+  margin-bottom: 20px; /* More space */
+}
+
+/* Org Info on Right (Start in RTL) */
+.org-info {
+  text-align: right; /* Explicitly right aligned */
+  flex: 1;
+}
+
+.org-info h1 {
+  font-size: 24px;
+  font-weight: 800;
+  margin: 0 0 6px 0;
+  color: #111;
 }
 
 .org-logo .logo-placeholder {
-  width: 70px;
-  height: 70px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  width: 80px;
+  height: 80px;
+  background: linear-gradient(135deg, #2563eb 0%, #1e40af 100%);
   border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
   font-weight: bold;
-  font-size: 11px;
+  font-size: 12px;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 }
 
-.org-info {
-  flex: 1;
-  text-align: center;
-  margin: 0 20px;
+/* Sub Header */
+.sub-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin: 10px 0 25px 0;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #f3f4f6;
 }
 
-.org-info h1 {
-  font-size: 22px;
-  margin: 0 0 6px 0;
-  color: #1f2937;
-  font-weight: 700;
-}
-
-.org-contact,
-.org-address {
-  font-size: 11px;
-  color: #6b7280;
-  margin: 3px 0;
-}
-
-.receipt-type {
-  min-width: 140px;
-  text-align: center;
-  padding: 10px 16px;
-  border-radius: 8px;
-}
-
-.receipt-type.income-type {
-  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-}
-
-.receipt-type.expense-type {
-  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-}
-
-.receipt-type h2 {
-  font-size: 15px;
+.receipt-type-label h2 {
+  font-size: 20px;
+  font-weight: 800;
   margin: 0;
-  color: white;
+  color: #2563eb;
+}
+
+.receipt-meta {
+  display: flex;
+  gap: 15px; /* Side by side now? Or stacked? User said "Transaction # (Left) Date (Left)" - usually stacked or inline */
+  /* User previous request: "Display Transaction #: ... directly under it Date: ..." -> Stacked */
+  flex-direction: column; 
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.meta-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f8fafc;
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+}
+
+.meta-label {
   font-weight: 700;
+  color: #64748b;
+  font-size: 11px;
 }
 
-.divider {
-  height: 2px;
-  background: linear-gradient(90deg, transparent, #d1d5db, transparent);
-  margin: 12px 0;
+.meta-value {
+  font-weight: 700;
+  color: #1e293b;
+  font-size: 13px;
+  font-family: monospace;
 }
 
-/* Transaction header */
-.transaction-header {
-  margin: 15px 0;
+/* Centered Amount Section */
+.centered-amount-section {
+  text-align: center;
+  margin-bottom: 10px;
 }
 
-.header-row {
+.amount-label-large {
+  font-size: 14px;
+  color: #64748b;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.amount-type-suffix {
+  color: #2563eb;
+}
+
+.amount-value-large {
+  font-size: 28px;
+  font-weight: 800;
+  color: #1e3a8a;
+  background: linear-gradient(to right, transparent, #eff6ff, transparent);
+  padding: 5px 0;
+  border-radius: 8px; /* Visual touch */
+}
+
+.currency-symbol {
+  font-size: 18px;
+  color: #3b82f6;
+  margin-right: 5px;
+}
+
+/* Amount Words Centered */
+.amount-words-centered {
+  text-align: center;
+  margin-bottom: 25px;
+  background: #fefce8;
+  border: 1px dashed #facc15;
+  padding: 8px;
+  border-radius: 6px;
+  display: inline-block; /* Shrink to fit */
+  width: 100%; /* Or stick to full width? Center text */
+}
+
+.words-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #a16207;
+  margin-left: 8px;
+}
+
+.words-value {
+  font-size: 14px;
+  font-weight: 700;
+  color: #713f12;
+}
+
+/* Main Data Grid - 3 Columns */
+.main-data-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 20px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 15px;
+  margin-bottom: 25px;
 }
 
-.header-item {
+.grid-cell {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 16px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
 }
 
-.header-item .label {
-  font-size: 12px;
-  color: #6b7280;
-  font-weight: 600;
-}
-
-.header-item .value-large {
-  font-size: 18px;
-  color: #1f2937;
+.cell-label {
+  font-size: 11px;
+  color: #64748b;
   font-weight: 700;
+  text-transform: uppercase;
 }
 
-/* Transaction details box */
-.transaction-details-box {
-  background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
-  border: 2px solid #3b82f6;
-  border-radius: 8px;
-  padding: 12px 18px;
-  margin: 15px 0;
-  line-height: 1.9;
-}
-
-.details-line {
-  font-size: 13px;
-  color: #1e40af;
-  font-weight: 600;
-  margin: 3px 0;
-}
-
-/* Amount section */
-.amount-section {
-  margin: 20px 0;
-}
-
-.amount-box {
-  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-  border: 3px solid #f59e0b;
-  border-radius: 12px;
-  padding: 20px;
-  text-align: center;
-}
-
-.amount-value {
-  font-size: 36px;
-  font-weight: 700;
-  color: #92400e;
-  margin-bottom: 8px;
-}
-
-.amount-words {
-  font-size: 16px;
-  color: #78350f;
+.cell-value {
+  font-size: 14px;
+  color: #0f172a;
   font-weight: 600;
 }
 
-/* Statement section */
+.sub-text {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 400;
+}
+
+/* Statement */
 .statement-section {
   background: #f9fafb;
-  border-right: 4px solid #6b7280;
+  border-right: 4px solid #94a3b8;
   padding: 15px;
   margin: 15px 0;
   border-radius: 6px;
 }
 
 .statement-label {
-  font-size: 13px;
-  color: #4b5563;
+  font-size: 12px;
+  color: #475569;
   font-weight: 700;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .statement-text {
-  font-size: 15px;
-  color: #1f2937;
+  font-size: 14px;
+  color: #334155;
   line-height: 1.6;
 }
 
-/* Details grid */
-.details-grid {
+/* Reference */
+.ref-section {
+  margin: 10px 0;
   display: flex;
-  flex-direction: column;
   gap: 10px;
-  margin: 15px 0;
-}
-
-.detail-row {
-  display: flex;
-  padding: 10px 15px;
-  background: #f3f4f6;
-  border-radius: 6px;
-  border-right: 3px solid #9ca3af;
-}
-
-.detail-label {
   font-size: 13px;
-  color: #4b5563;
-  font-weight: 600;
-  min-width: 130px;
 }
 
-.detail-value {
-  font-size: 14px;
-  color: #1f2937;
-  font-weight: 500;
-  flex: 1;
+.ref-label {
+  font-weight: 700;
+  color: #64748b;
 }
 
 /* Signatures */
 .signatures-section {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 25px;
-  margin: 25px 0 15px 0;
+  display: flex;
+  justify-content: space-around;
+  margin-top: 40px;
+  margin-bottom: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #e2e8f0;
 }
 
 .signature-box {
+  width: 20%;
   text-align: center;
 }
 
 .signature-label {
-  font-size: 12px;
-  color: #6b7280;
-  margin-bottom: 25px;
-  font-weight: 600;
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 700;
+  margin-top: 8px;
 }
 
 .signature-line {
-  border-top: 2px solid #000;
-  margin: 0 10px;
-  min-height: 35px;
+  border-bottom: 2px solid #cbd5e1;
+  margin-bottom: 8px;
+  height: 40px;
 }
 
-.signature-name {
-  font-size: 11px;
-  color: #4b5563;
-  margin-top: 6px;
-  font-weight: 500;
-}
-
-/* Footer */
-.receipt-footer {
-  text-align: center;
-  padding-top: 12px;
-  border-top: 1px solid #e5e7eb;
-}
-
-.receipt-footer p {
-  font-size: 10px;
-  color: #9ca3af;
-  margin: 0;
-}
-
-/* Print styles */
+/* Print overrides */
 @media print {
-  .no-print {
-    display: none !important;
-  }
-
+  .no-print { display: none !important; }
   .receipt-page {
-    padding: 0;
     background: white;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    height: 100vh; /* Use full height to center vertically */
-    margin: 0;
+    padding: 0;
+    height: auto;
+    display: block; 
   }
-
   .receipt-content {
     box-shadow: none;
-    border: none; /* Optional: remove border for print if desired, or keep it */
-    padding: 0;
+    border: none;
+    width: 100%;
     margin: 0;
-    width: 90%; /* Prevent sticking to edges */
-    max-width: 190mm; /* A5 width minus margins */
+    padding: 0;
   }
-
-  @page {
-    size: A5 landscape;
-    margin: 0; /* We handle margins via CSS */
+  
+  .amount-value-large {
+    background: none;
+    border: 1px solid #eee;
+  }
+  
+  .amount-words-centered {
+    border: 1px solid #ccc;
+    background: none;
+  }
+  
+  .main-data-grid {
+    gap: 10px;
+  }
+  
+  .grid-cell {
+    border: 1px solid #ccc;
+    box-shadow: none;
   }
 }
 
@@ -802,25 +802,24 @@ const formatTime = (date) => {
 @media screen and (max-width: 900px) {
   .receipt-content {
     width: 100%;
-    padding: 12mm;
+    padding: 10mm;
   }
-
   .receipt-header {
-    flex-direction: column;
-    gap: 12px;
+    flex-direction: column-reverse; /* Stack logo on top or info? Usually Logo top on mobile */
+    text-align: center;
   }
-
-  .org-info h1 {
-    font-size: 18px;
-  }
-
-  .header-row {
+  .org-info { text-align: center; }
+  
+  .main-data-grid {
     grid-template-columns: 1fr;
   }
-
+  
   .signatures-section {
-    grid-template-columns: 1fr;
-    gap: 18px;
+    flex-wrap: wrap;
+    gap: 20px;
+  }
+  .signature-box {
+    width: 45%;
   }
 }
 </style>

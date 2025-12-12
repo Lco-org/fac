@@ -3,6 +3,8 @@ package handlers
 import (
 	"cso-erp/internal/models"
 	"cso-erp/internal/services"
+	"log"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -25,10 +27,11 @@ func (h *HRHandler) CreateDeduction(c *fiber.Ctx) error {
 		})
 	}
 
-	userID := c.Locals("userID").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
 
 	deduction, err := h.hrService.CreateDeduction(c.Context(), &req, userID)
 	if err != nil {
+		log.Printf("❌ Failed to create deduction: %v", err)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": err.Error(),
 		})
@@ -69,7 +72,7 @@ func (h *HRHandler) CreateBonus(c *fiber.Ctx) error {
 		})
 	}
 
-	userID := c.Locals("userID").(uuid.UUID)
+	userID := c.Locals("user_id").(uuid.UUID)
 
 	bonus, err := h.hrService.CreateBonus(c.Context(), &req, userID)
 	if err != nil {
@@ -108,4 +111,43 @@ func (h *HRHandler) ListBonuses(c *fiber.Ctx) error {
 func (h *HRHandler) GetEmployeeFinancialProfile(c *fiber.Ctx) error {
 	// Placeholder for future implementation
 	return c.JSON(fiber.Map{"message": "Not implemented yet"})
+}
+
+// GetMonthlySalaries returns the calculated salaries for a specific month
+func (h *HRHandler) GetMonthlySalaries(c *fiber.Ctx) error {
+	monthStr := c.Query("month")
+	var monthYear time.Time
+	var err error
+
+	if monthStr == "" {
+		monthYear = time.Now()
+	} else {
+		// Expect YYYY-MM
+		monthYear, err = time.Parse("2006-01", monthStr)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid month format. Use YYYY-MM",
+			})
+		}
+	}
+
+	var employeeID *uuid.UUID
+	if idStr := c.Query("employee_id"); idStr != "" {
+		id, err := uuid.Parse(idStr)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Invalid employee ID",
+			})
+		}
+		employeeID = &id
+	}
+
+	summaries, err := h.hrService.GetMonthlySalaries(c.Context(), monthYear, employeeID)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(summaries)
 }

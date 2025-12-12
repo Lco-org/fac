@@ -163,7 +163,7 @@ func main() {
 	projects.Put("/:id", projectHandler.UpdateProject)
 	projects.Delete("/:id", projectHandler.DeleteProject)
 
-	employees := protected.Group("/employees", middleware.RequireRole(models.RoleAdmin))
+	employees := protected.Group("/employees", middleware.RequireRole(models.RoleAdmin, models.RoleHR, models.RoleFinance))
 	employees.Get("", employeeHandler.ListEmployees)
 	employees.Post("", employeeHandler.CreateEmployee)
 	employees.Get("/:id", employeeHandler.GetEmployee)
@@ -180,7 +180,8 @@ func main() {
 	members.Post("/:id/renew", memberHandler.RenewMembership)
 	members.Get("/:id/subscriptions", memberHandler.GetSubscriptions)
 
-	hr := protected.Group("/hr", middleware.RequireRole(models.RoleHR))
+	hr := protected.Group("/hr", middleware.RequireRole(models.RoleHR, models.RoleAdmin, models.RoleFinance))
+	hr.Get("/salaries", hrHandler.GetMonthlySalaries)
 	hr.Post("/deductions", hrHandler.CreateDeduction)
 	hr.Get("/deductions", hrHandler.ListDeductions)
 	hr.Post("/bonuses", hrHandler.CreateBonus)
