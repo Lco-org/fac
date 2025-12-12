@@ -236,7 +236,7 @@ func (s *ReceiptService) GetReceiptData(ctx context.Context, transactionID uuid.
 
 				var relatedContainer models.FinancialContainer
 				err = s.db.QueryRowContext(ctx, `
-					SELECT id, name, name_ar, type, currency
+					SELECT id, name, name_ar, type, currency, bank_name, bank_name_ar
 					FROM financial_containers WHERE id = $1
 				`, relatedTx.ContainerID).Scan(
 					&relatedContainer.ID,
@@ -244,6 +244,8 @@ func (s *ReceiptService) GetReceiptData(ctx context.Context, transactionID uuid.
 					&relatedContainer.NameAr,
 					&relatedContainer.Type,
 					&relatedContainer.Currency,
+					&relatedContainer.BankName,
+					&relatedContainer.BankNameAr,
 				)
 
 				if err == nil {

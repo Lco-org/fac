@@ -111,14 +111,20 @@ const isIncome = computed(() => {
     
     if (t.original_transaction_id) {
       // This is credit (IN), so it's FROM related TO current
-      const relatedName = relatedC ? (relatedC.name_ar || relatedC.name) : '...'
-      parts.push(`إلى حساب ${containerType} (${containerName})`)
-      parts.push(`من حساب ${relatedName}`)
+      // Prefer Bank Name if available, else container name
+      const relatedName = relatedC ? (relatedC.bank_name_ar || relatedC.bank_name || relatedC.name_ar || relatedC.name) : '...'
+      const currentName = c.bank_name_ar || c.bank_name || c.name_ar || c.name
+
+      parts.push(`إلى حساب ${containerType}: ${currentName}`)
+      parts.push(`من حساب: ${relatedName}`)
     } else {
       // This is debit (OUT), so it's FROM current TO related
-      const relatedName = relatedC ? (relatedC.name_ar || relatedC.name) : '...'
-      parts.push(`من حساب ${containerType} (${containerName})`)
-      parts.push(`إلى حساب ${relatedName}`)
+      // Prefer Bank Name if available, else container name
+      const relatedName = relatedC ? (relatedC.bank_name_ar || relatedC.bank_name || relatedC.name_ar || relatedC.name) : '...'
+      const currentName = c.bank_name_ar || c.bank_name || c.name_ar || c.name
+
+      parts.push(`من حساب ${containerType}: ${currentName}`)
+      parts.push(`إلى حساب: ${relatedName}`)
     }
   } else {
     parts.push(`دفع مبلغ (${typeText})`)
@@ -422,26 +428,50 @@ const formatTime = (date) => {
 
         <!-- Main Data Grid (Revised Logic) -->
         <div class="main-data-grid three-col">
-          <!-- Column 1: Financial Account (The Org's Side) -->
+          <!-- Column 1: Financial Account (Source/Destination) -->
           <div class="grid-cell">
-            <span class="cell-label">{{ receiptData.transaction.type === 'transfer' ? 'من حساب:' : (isIncome ? 'إلى حساب (الخزينة/المصرف):' : 'من حساب (الخزينة/المصرف):') }}</span>
+            <span class="cell-label">
+              <template v-if="receiptData.transaction.type === 'transfer'">
+                {{ receiptData.transaction.original_transaction_id ? 'إلى حساب:' : 'من حساب:' }}
+              </template>
+              <template v-else>
+                {{ isIncome ? 'إلى حساب (الخزينة/المصرف):' : 'من حساب (الخزينة/المصرف):' }}
+              </template>
+            </span>
             <span class="cell-value">
-              {{ receiptData.container.name_ar || receiptData.container.name }}
+              {{ receiptData.container.bank_name_ar || receiptData.container.bank_name || receiptData.container.name_ar || receiptData.container.name }}
               <span class="sub-text">({{ receiptData.container.type === 'cash' ? 'نقدي' : 'مصرفي' }})</span>
             </span>
           </div>
           
-          <!-- Column 2: The Other Party (Beneficiary or Source) -->
+          <!-- Column 2: The Other Party (Beneficiary/Source OR Target Account for Transfer) -->
           <div class="grid-cell">
             <span class="cell-label">
-              {{ isIncome ? 'استلمنا من:' : 'صرف لأمر:' }}
+              <template v-if="receiptData.transaction.type === 'transfer'">
+                {{ receiptData.transaction.original_transaction_id ? 'من حساب:' : 'إلى حساب:' }}
+              </template>
+              <template v-else>
+                {{ isIncome ? 'استلمنا من:' : 'صرف لأمر:' }}
+              </template>
             </span>
             <span class="cell-value">
-              <!-- Priority: Employee -> Member -> PayeePayer (External) -->
-              <template v-if="receiptData.employee">{{ receiptData.employee.full_name_ar || receiptData.employee.full_name }} <span class="sub-text">(موظف)</span></template>
-              <template v-else-if="receiptData.member">{{ receiptData.member.full_name_ar || receiptData.member.full_name }} <span class="sub-text">(عضو)</span></template>
-              <template v-else-if="receiptData.transaction.payee_payer_ar || receiptData.transaction.payee_payer">{{ receiptData.transaction.payee_payer_ar || receiptData.transaction.payee_payer }}</template>
-              <template v-else>-</template>
+              <!-- Transfer: Show Related Container -->
+              <template v-if="receiptData.transaction.type === 'transfer'">
+                <template v-if="receiptData.related_container">
+                  {{ receiptData.related_container.bank_name_ar || receiptData.related_container.bank_name || receiptData.related_container.name_ar || receiptData.related_container.name }}
+                  <span class="sub-text">({{ receiptData.related_container.type === 'cash' ? 'نقدي' : 'مصرفي' }})</span>
+                </template>
+                <template v-else>-</template>
+              </template>
+
+              <!-- Normal Transaction: Show Beneficiary -->
+              <template v-else>
+                <!-- Priority: Employee -> Member -> PayeePayer (External) -->
+                <template v-if="receiptData.employee">{{ receiptData.employee.full_name_ar || receiptData.employee.full_name }} <span class="sub-text">(موظف)</span></template>
+                <template v-else-if="receiptData.member">{{ receiptData.member.full_name_ar || receiptData.member.full_name }} <span class="sub-text">(عضو)</span></template>
+                <template v-else-if="receiptData.transaction.payee_payer_ar || receiptData.transaction.payee_payer">{{ receiptData.transaction.payee_payer_ar || receiptData.transaction.payee_payer }}</template>
+                <template v-else>-</template>
+              </template>
             </span>
           </div>
 
