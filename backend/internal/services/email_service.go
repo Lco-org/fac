@@ -36,6 +36,21 @@ const (
 	MinTLSVersion      = tls.VersionTLS12
 )
 
+// EmailRecipient represents a recipient for bulk emails
+type EmailRecipient struct {
+	ID    string
+	Email string
+	Name  string
+}
+
+// BulkEmailResult contains the results of a bulk email operation
+type BulkEmailResult struct {
+	Total     int      `json:"total"`
+	Sent      int      `json:"sent"`
+	Failed    int      `json:"failed"`
+	FailedIDs []string `json:"failed_ids,omitempty"`
+}
+
 var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
 
 func NewEmailService(config *EmailConfig) *EmailService {
@@ -146,6 +161,174 @@ func (s *EmailService) SendOTPEmail(ctx context.Context, toEmail, toName, code s
 </html>`, toName, code, time.Now().Format("2006-01-02 15:04:05"))
 
 	return s.SendEmail(ctx, toEmail, subject, body, true)
+}
+
+// SendWelcomeEmail sends a welcome message to newly created users
+func (s *EmailService) SendWelcomeEmail(ctx context.Context, toEmail, fullName, username, role string) error {
+	if err := validateEmail(toEmail); err != nil {
+		return err
+	}
+
+	fullName = sanitizeHeader(fullName)
+
+	roleArabic := map[string]string{
+		"admin":   "مدير النظام",
+		"finance": "المحاسب",
+		"auditor": "المراجع",
+		"hr":      "الموارد البشرية",
+	}[role]
+	if roleArabic == "" {
+		roleArabic = role
+	}
+
+	subject := "مرحباً بك في نظام CSO ERP"
+	body := fmt.Sprintf(`<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; direction: rtl; margin: 0; padding: 0; background-color: #f4f4f4; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #1a56db 0%%, #2563eb 100%%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
+        .header h1 { margin: 0; font-size: 28px; }
+        .content { background: #ffffff; padding: 30px; border: 1px solid #e5e7eb; }
+        .welcome-text { font-size: 18px; color: #1f2937; margin-bottom: 20px; }
+        .info-box { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 20px; margin: 20px 0; }
+        .info-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #e2e8f0; }
+        .info-row:last-child { border-bottom: none; }
+        .info-label { color: #6b7280; font-weight: 500; }
+        .info-value { color: #1f2937; font-weight: 700; }
+        .note { color: #6b7280; font-size: 14px; margin-top: 20px; padding: 15px; background: #fef9c3; border-radius: 6px; border-right: 4px solid #facc15; }
+        .footer { background: #374151; color: #9ca3af; padding: 20px; text-align: center; font-size: 12px; border-radius: 0 0 8px 8px; }
+        .footer p { margin: 5px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎉 مرحباً بك في الفريق!</h1>
+        </div>
+        <div class="content">
+            <p class="welcome-text">مرحباً <strong>%s</strong>،</p>
+            <p>تم إنشاء حسابك بنجاح في نظام إدارة الموارد المالية (CSO ERP). يسعدنا انضمامك إلينا!</p>
+            
+            <div class="info-box">
+                <h3 style="margin-top: 0; color: #1a56db;">بيانات حسابك:</h3>
+                <div class="info-row">
+                    <span class="info-label">اسم المستخدم:</span>
+                    <span class="info-value">%s</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">البريد الإلكتروني:</span>
+                    <span class="info-value">%s</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">الصلاحية:</span>
+                    <span class="info-value">%s</span>
+                </div>
+            </div>
+            
+            <div class="note">
+                💡 <strong>ملاحظة هامة:</strong> للحفاظ على أمان حسابك، يرجى تغيير كلمة المرور عند أول تسجيل دخول وتفعيل خاصية التحقق بخطوتين (2FA).
+            </div>
+            
+            <p style="margin-top: 25px; font-size: 14px; color: #6b7280;">
+                تم إرسال هذه الرسالة في: %s
+            </p>
+        </div>
+        <div class="footer">
+            <p>هذا بريد آلي، يرجى عدم الرد عليه.</p>
+            <p>© منظمة LCO - جميع الحقوق محفوظة</p>
+        </div>
+    </div>
+</body>
+</html>`, fullName, username, toEmail, roleArabic, time.Now().Format("2006-01-02 15:04:05"))
+
+	return s.SendEmail(ctx, toEmail, subject, body, true)
+}
+
+// SendBulkEmail sends personalized emails to multiple recipients
+func (s *EmailService) SendBulkEmail(ctx context.Context, recipients []EmailRecipient, subject, message string) *BulkEmailResult {
+	result := &BulkEmailResult{
+		Total:     len(recipients),
+		Sent:      0,
+		Failed:    0,
+		FailedIDs: []string{},
+	}
+
+	for _, recipient := range recipients {
+		if err := validateEmail(recipient.Email); err != nil {
+			result.Failed++
+			result.FailedIDs = append(result.FailedIDs, recipient.ID)
+			continue
+		}
+
+		body := s.buildBulkEmailBody(recipient.Name, message)
+		err := s.SendEmail(ctx, recipient.Email, subject, body, true)
+		if err != nil {
+			log.Printf("Failed to send email to %s: %v", recipient.Email, err)
+			result.Failed++
+			result.FailedIDs = append(result.FailedIDs, recipient.ID)
+		} else {
+			result.Sent++
+		}
+	}
+
+	return result
+}
+
+// buildBulkEmailBody creates a beautiful HTML email body for bulk messages
+func (s *EmailService) buildBulkEmailBody(recipientName, message string) string {
+	return fmt.Sprintf(`<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; direction: rtl; margin: 0; padding: 0; background-color: #f4f4f4; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #1a56db 0%%, #3b82f6 100%%); color: white; padding: 25px 30px; text-align: center; border-radius: 12px 12px 0 0; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 600; }
+        .header .subtitle { margin-top: 8px; font-size: 14px; opacity: 0.9; }
+        .content { background: #ffffff; padding: 30px; border: 1px solid #e5e7eb; border-top: none; }
+        .greeting { font-size: 18px; color: #1f2937; margin-bottom: 20px; }
+        .message-box { background: linear-gradient(135deg, #f0f9ff 0%%, #e0f2fe 100%%); border: 1px solid #bae6fd; border-radius: 10px; padding: 25px; margin: 20px 0; line-height: 1.8; color: #0c4a6e; font-size: 15px; }
+        .divider { height: 1px; background: linear-gradient(to right, transparent, #e5e7eb, transparent); margin: 25px 0; }
+        .footer { background: #1f2937; color: #9ca3af; padding: 20px; text-align: center; font-size: 12px; border-radius: 0 0 12px 12px; }
+        .footer p { margin: 5px 0; }
+        .logo { font-size: 28px; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">📧</div>
+            <h1>رسالة من منظمة LCO</h1>
+            <div class="subtitle">نظام إدارة الموارد المالية</div>
+        </div>
+        <div class="content">
+            <p class="greeting">مرحباً <strong>%s</strong>،</p>
+            
+            <div class="message-box">
+                %s
+            </div>
+            
+            <div class="divider"></div>
+            
+            <p style="font-size: 13px; color: #6b7280;">
+                تم إرسال هذه الرسالة في: %s
+            </p>
+        </div>
+        <div class="footer">
+            <p>هذا بريد آلي من نظام CSO ERP</p>
+            <p>© منظمة LCO - جميع الحقوق محفوظة</p>
+        </div>
+    </div>
+</body>
+</html>`, recipientName, message, time.Now().Format("2006-01-02 15:04:05"))
 }
 
 type loginAuth struct {

@@ -50,6 +50,7 @@ const menuItems = computed(() => {
         { title: 'الموظفين', path: '/admin/employees' },
         { title: 'الأعضاء المنتسبين', path: '/admin/members' },
         { title: 'إعدادات لوحة التحكم', path: '/admin/dashboard-config' },
+        { title: 'المراسلات', path: '/admin/messaging' },
       ],
     },
     {

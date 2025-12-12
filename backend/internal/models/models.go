@@ -299,11 +299,21 @@ type CurrencyAmount struct {
 	Amount   float64      `json:"amount"`
 }
 
+type DeficitDetail struct {
+	ContainerID   uuid.UUID     `json:"container_id"`
+	ContainerName string        `json:"container_name"`
+	ContainerType ContainerType `json:"container_type"`
+	Currency      CurrencyCode  `json:"currency"`
+	Amount        float64       `json:"amount"`
+}
+
 type FinancialSummary struct {
-	TotalBalance  []CurrencyAmount `json:"total_balance"`
-	TotalIncome   []CurrencyAmount `json:"total_income"`
-	TotalExpenses []CurrencyAmount `json:"total_expenses"`
-	TotalCustody  []CurrencyAmount `json:"total_custody"`
+	TotalBalance   []CurrencyAmount `json:"total_balance"`
+	TotalIncome    []CurrencyAmount `json:"total_income"`
+	TotalExpenses  []CurrencyAmount `json:"total_expenses"`
+	TotalCustody   []CurrencyAmount `json:"total_custody"`
+	TotalDeficit   []CurrencyAmount `json:"total_deficit"`
+	DeficitDetails []DeficitDetail  `json:"deficit_details"`
 }
 
 type ProjectTransactionDetail struct {

@@ -645,6 +645,27 @@ const exportToExcel = () => {
               </div>
               <div v-else class="text-gray-400">لا توجد بيانات</div>
             </div>
+
+            <!-- Total Deficit -->
+            <div v-if="dashboardData.summary.total_deficit && dashboardData.summary.total_deficit.length > 0" class="bg-red-50 rounded-lg p-4 shadow border-2 border-red-200">
+              <h3 class="text-sm font-semibold text-red-700 mb-3">⚠️ إجمالي العجز</h3>
+              <div class="space-y-2">
+                <div v-for="amount in dashboardData.summary.total_deficit" :key="amount.currency" class="text-lg font-bold text-red-600">
+                  - {{ formatCurrency(amount.amount, amount.currency) }}
+                </div>
+              </div>
+              <!-- Deficit Sources -->
+              <div v-if="dashboardData.summary.deficit_details && dashboardData.summary.deficit_details.length > 0" class="mt-3 pt-3 border-t border-red-200">
+                <p class="text-xs text-red-600 mb-2">📍 مصادر العجز:</p>
+                <div v-for="detail in dashboardData.summary.deficit_details" :key="detail.container_id" class="text-xs text-red-500 flex justify-between items-center py-1">
+                  <span>
+                    {{ detail.container_type === 'bank' ? '🏦' : '💵' }}
+                    {{ detail.container_name }}
+                  </span>
+                  <span class="font-medium">- {{ formatCurrency(detail.amount, detail.currency) }}</span>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
         

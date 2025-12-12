@@ -300,18 +300,22 @@ func (s *ReportService) GetDashboardSummary(ctx context.Context, userRole string
 		if err != nil {
 			log.Printf("ERROR: Failed to calculate financial summary: %v", err)
 			summary = models.FinancialSummary{
-				TotalBalance:  make([]models.CurrencyAmount, 0),
-				TotalIncome:   make([]models.CurrencyAmount, 0),
-				TotalExpenses: make([]models.CurrencyAmount, 0),
-				TotalCustody:  make([]models.CurrencyAmount, 0),
+				TotalBalance:   make([]models.CurrencyAmount, 0),
+				TotalIncome:    make([]models.CurrencyAmount, 0),
+				TotalExpenses:  make([]models.CurrencyAmount, 0),
+				TotalCustody:   make([]models.CurrencyAmount, 0),
+				TotalDeficit:   make([]models.CurrencyAmount, 0),
+				DeficitDetails: make([]models.DeficitDetail, 0),
 			}
 		}
 	} else {
 		summary = models.FinancialSummary{
-			TotalBalance:  make([]models.CurrencyAmount, 0),
-			TotalIncome:   make([]models.CurrencyAmount, 0),
-			TotalExpenses: make([]models.CurrencyAmount, 0),
-			TotalCustody:  make([]models.CurrencyAmount, 0),
+			TotalBalance:   make([]models.CurrencyAmount, 0),
+			TotalIncome:    make([]models.CurrencyAmount, 0),
+			TotalExpenses:  make([]models.CurrencyAmount, 0),
+			TotalCustody:   make([]models.CurrencyAmount, 0),
+			TotalDeficit:   make([]models.CurrencyAmount, 0),
+			DeficitDetails: make([]models.DeficitDetail, 0),
 		}
 	}
 
@@ -328,10 +332,12 @@ func (s *ReportService) GetDashboardSummary(ctx context.Context, userRole string
 
 func (s *ReportService) calculateFinancialSummary(ctx context.Context) (models.FinancialSummary, error) {
 	summary := models.FinancialSummary{
-		TotalBalance:  make([]models.CurrencyAmount, 0),
-		TotalIncome:   make([]models.CurrencyAmount, 0),
-		TotalExpenses: make([]models.CurrencyAmount, 0),
-		TotalCustody:  make([]models.CurrencyAmount, 0),
+		TotalBalance:   make([]models.CurrencyAmount, 0),
+		TotalIncome:    make([]models.CurrencyAmount, 0),
+		TotalExpenses:  make([]models.CurrencyAmount, 0),
+		TotalCustody:   make([]models.CurrencyAmount, 0),
+		TotalDeficit:   make([]models.CurrencyAmount, 0),
+		DeficitDetails: make([]models.DeficitDetail, 0),
 	}
 
 	balanceRows, err := s.db.QueryContext(ctx, `
@@ -418,6 +424,47 @@ func (s *ReportService) calculateFinancialSummary(ctx context.Context) (models.F
 			continue
 		}
 		summary.TotalCustody = append(summary.TotalCustody, ca)
+	}
+
+	// Query for deficit: sum of negative balances grouped by currency
+	deficitRows, err := s.db.QueryContext(ctx, `
+		SELECT currency, SUM(ABS(balance)) as total
+		FROM financial_containers
+		WHERE is_active = true AND balance < 0
+		GROUP BY currency
+		ORDER BY currency
+	`)
+	if err != nil {
+		return summary, err
+	}
+	defer deficitRows.Close()
+
+	for deficitRows.Next() {
+		var ca models.CurrencyAmount
+		if err := deficitRows.Scan(&ca.Currency, &ca.Amount); err != nil {
+			continue
+		}
+		summary.TotalDeficit = append(summary.TotalDeficit, ca)
+	}
+
+	// Query for individual deficit details: container name, type, currency, balance
+	deficitDetailRows, err := s.db.QueryContext(ctx, `
+		SELECT id, COALESCE(name_ar, name), type, currency, ABS(balance) as deficit
+		FROM financial_containers
+		WHERE is_active = true AND balance < 0
+		ORDER BY ABS(balance) DESC
+	`)
+	if err != nil {
+		return summary, err
+	}
+	defer deficitDetailRows.Close()
+
+	for deficitDetailRows.Next() {
+		var dd models.DeficitDetail
+		if err := deficitDetailRows.Scan(&dd.ContainerID, &dd.ContainerName, &dd.ContainerType, &dd.Currency, &dd.Amount); err != nil {
+			continue
+		}
+		summary.DeficitDetails = append(summary.DeficitDetails, dd)
 	}
 
 	return summary, nil

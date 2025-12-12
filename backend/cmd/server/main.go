@@ -61,7 +61,7 @@ func main() {
 	hrService := services.NewHRService(db)
 
 	authHandler := handlers.NewAuthHandler(authService, cfg)
-	userHandler := handlers.NewUserHandler(userService)
+	userHandler := handlers.NewUserHandler(userService, emailService)
 	containerHandler := handlers.NewContainerHandler(containerService)
 	transactionHandler := handlers.NewTransactionHandler(transactionService)
 	reportHandler := handlers.NewReportHandler(reportService)
@@ -72,6 +72,7 @@ func main() {
 	transferHandler := handlers.NewTransferHandler(transferService)
 	receiptHandler := handlers.NewReceiptHandler(receiptService)
 	hrHandler := handlers.NewHRHandler(hrService)
+	emailHandler := handlers.NewEmailHandler(emailService, userService, employeeService, memberService)
 
 	app := fiber.New(fiber.Config{
 		AppName:      "CSO ERP System",
@@ -187,6 +188,10 @@ func main() {
 	hr.Post("/bonuses", hrHandler.CreateBonus)
 	hr.Get("/bonuses", hrHandler.ListBonuses)
 	hr.Get("/employees/profile", hrHandler.GetEmployeeFinancialProfile)
+
+	// Email routes (Admin only)
+	email := protected.Group("/email", middleware.RequireRole(models.RoleAdmin))
+	email.Post("/bulk", emailHandler.SendBulkEmail)
 
 	port := cfg.App.Port
 	log.Printf("🚀 Server starting on port %s", port)

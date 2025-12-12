@@ -97,6 +97,12 @@ const routes = [
                 meta: { requiresRole: ['admin'] },
             },
             {
+                path: 'admin/messaging',
+                name: 'Messaging',
+                component: () => import('@/views/admin/MessagingView.vue'),
+                meta: { requiresRole: ['admin'] },
+            },
+            {
                 path: 'account/security',
                 name: 'AccountSecurity',
                 component: () => import('@/views/admin/AccountSecurityView.vue'),
