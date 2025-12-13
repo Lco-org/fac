@@ -3,7 +3,6 @@ package handlers
 import (
 	"cso-erp/internal/config"
 	"cso-erp/internal/services"
-	"log"
 	"strings"
 	"time"
 
@@ -60,15 +59,9 @@ func (h *SSAAuthHandler) isIPAllowed(clientIP string) bool {
 // Login handles SSA login with username and password
 // POST /api/v1/ssa/auth/login
 func (h *SSAAuthHandler) Login(c *fiber.Ctx) error {
-	// Check IP restriction
 	clientIP := h.getClientIP(c)
 
-	// Log for debugging
-	log.Printf("SSA Login attempt from IP: %s", clientIP)
-
 	if !h.isIPAllowed(clientIP) {
-		log.Printf("SSA Login: IP not allowed: %s", clientIP)
-		// Return 404 to hide SSA existence
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "Not Found",
 		})
@@ -76,17 +69,12 @@ func (h *SSAAuthHandler) Login(c *fiber.Ctx) error {
 
 	var req services.SSALoginRequest
 	if err := c.BodyParser(&req); err != nil {
-		log.Printf("SSA Login: Bad request body: %v", err)
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "بيانات غير صالحة",
 		})
 	}
 
-	log.Printf("SSA Login: Attempting login for user: %s", req.Username)
-
-	// Validate
 	if req.Username == "" || req.Password == "" {
-		log.Printf("SSA Login: Missing username or password")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "اسم المستخدم وكلمة المرور مطلوبان",
 		})
@@ -95,9 +83,6 @@ func (h *SSAAuthHandler) Login(c *fiber.Ctx) error {
 	// Attempt login
 	result, err := h.authService.Login(c.Context(), &req, clientIP)
 	if err != nil {
-		log.Printf("SSA Login failed for %s: %v", req.Username, err)
-		// Log for debugging
-		c.Response().Header.Set("X-SSA-Login-Error", err.Error())
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"error": err.Error(),
 		})
@@ -113,7 +98,7 @@ func (h *SSAAuthHandler) Login(c *fiber.Ctx) error {
 			Expires:  time.Now().Add(24 * time.Hour), // 24 hours
 			HTTPOnly: true,
 			Secure:   h.cfg.Security.CookieSecure,
-			SameSite: "Lax",
+			SameSite: "Strict",
 		})
 	}
 

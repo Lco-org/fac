@@ -7,7 +7,6 @@ import (
 	"cso-erp/internal/models"
 	"cso-erp/internal/security"
 	"cso-erp/internal/services"
-	"log"
 	"strings"
 	"time"
 
@@ -18,7 +17,7 @@ import (
 type AuthHandler struct {
 	masterDB     *database.DB
 	cfg          *config.Config
-	emailService *services.EmailService // Master email service
+	emailService *services.EmailService
 }
 
 func NewAuthHandler(masterDB *database.DB, cfg *config.Config, emailService *services.EmailService) *AuthHandler {
@@ -29,12 +28,9 @@ func NewAuthHandler(masterDB *database.DB, cfg *config.Config, emailService *ser
 	}
 }
 
-// getTenantService creates a request-scoped AuthService with tenant DB and SMTP
 func (h *AuthHandler) getTenantService(c *fiber.Ctx) (*services.AuthService, error) {
 	var db *database.DB
 
-	// Priority 1: Check for tenant_db from JWT claims (set by AuthMiddleware)
-	// This ensures authenticated users always use their correct tenant database
 	if tenantDBName := middleware.GetTenantDBName(c); tenantDBName != "" {
 		tenantConfig := &config.DatabaseConfig{
 			Host:     h.cfg.Database.Host,
@@ -48,13 +44,10 @@ func (h *AuthHandler) getTenantService(c *fiber.Ctx) (*services.AuthService, err
 		var err error
 		db, err = database.Connect(tenantConfig)
 		if err != nil {
-			log.Printf("[getTenantService] Failed to connect to JWT tenant DB '%s': %v", tenantDBName, err)
-		} else {
-			log.Printf("[getTenantService] Using tenant DB from JWT: %s", tenantDBName)
+			db = nil
 		}
 	}
 
-	// Priority 2: Fall back to TenantResolver's context (for unauthenticated routes like login)
 	if db == nil {
 		db = middleware.GetTenantDB(c)
 	}
@@ -63,17 +56,12 @@ func (h *AuthHandler) getTenantService(c *fiber.Ctx) (*services.AuthService, err
 		return nil, fiber.NewError(fiber.StatusInternalServerError, "Database connection not found")
 	}
 
-	// Setup SMTP Service for this tenant
 	smtpService := services.NewSMTPSettingsService(db, h.cfg)
 
-	// Get default SMTP settings
-	// We use background context as we don't want to cancel if request cancels (maybe?)
-	// Actually, using request context is fine.
 	smtpSettings, err := smtpService.GetDefaultSMTPSettings(c.Context())
 
 	var tenantEmailService *services.EmailService
 	if err == nil && smtpSettings != nil {
-		// Decrypt password
 		password, _ := smtpService.GetDecryptedPassword(c.Context(), smtpSettings.ID)
 
 		fromName := ""
@@ -93,10 +81,8 @@ func (h *AuthHandler) getTenantService(c *fiber.Ctx) (*services.AuthService, err
 		tenantEmailService = services.NewEmailServiceWithTenantConfig(tenantConfig)
 	}
 
-	// Use hierarchical email service (Tenant > Master)
 	finalEmailService := services.GetHierarchicalEmailService(tenantEmailService, h.emailService)
 
-	// Create AuthService with Tenant DB and correct Email Service
 	return services.NewAuthService(db, h.cfg, finalEmailService), nil
 }
 
@@ -203,9 +189,7 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 			}
 
 			if tenantDB, connErr := database.Connect(tenantConfig); connErr == nil {
-				log.Printf("[SmartLogin] Matched email domain '%s' to database '%s'", domain, dbName)
 				svc = services.NewAuthService(tenantDB, h.cfg, h.emailService)
-				// Store tenant DB name for token generation
 				c.Locals("login_tenant_db", dbName)
 			}
 		}
@@ -366,7 +350,7 @@ func (h *AuthHandler) completeLogin(c *fiber.Ctx, svc *services.AuthService, use
 		Expires:  time.Now().Add(h.cfg.JWT.Expiry),
 		HTTPOnly: true,
 		Secure:   h.cfg.Security.CookieSecure,
-		SameSite: "Lax",
+		SameSite: "Strict",
 		Path:     "/",
 	})
 
@@ -398,7 +382,7 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 		Expires:  time.Now().Add(-time.Hour),
 		HTTPOnly: true,
 		Secure:   h.cfg.Security.CookieSecure,
-		SameSite: "Lax",
+		SameSite: "Strict",
 		Path:     "/",
 	})
 
@@ -451,7 +435,7 @@ func (h *AuthHandler) RevokeAllSessions(c *fiber.Ctx) error {
 		Expires:  time.Now().Add(-time.Hour),
 		HTTPOnly: true,
 		Secure:   h.cfg.Security.CookieSecure,
-		SameSite: "Lax",
+		SameSite: "Strict",
 		Path:     "/",
 	})
 
@@ -511,7 +495,7 @@ func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
 		Expires:  time.Now().Add(-time.Hour),
 		HTTPOnly: true,
 		Secure:   h.cfg.Security.CookieSecure,
-		SameSite: "Lax",
+		SameSite: "Strict",
 		Path:     "/",
 	})
 

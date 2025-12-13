@@ -182,13 +182,6 @@ const routes = [
         component: () => import('@/views/ssa/SSALoginView.vue'),
         meta: { title: 'تسجيل دخول المشرف الأعلى' },
     },
-    // TEMPORARY: SSA Registration (remove in production!)
-    {
-        path: '/b8fb17/ssa/temp-register',
-        name: 'SSATempRegister',
-        component: () => import('@/views/ssa/SSATempRegisterView.vue'),
-        meta: { title: 'تسجيل SSA مؤقت' },
-    },
     {
         path: '/b8fb17/ssa',
         component: () => import('@/views/ssa/SuperAdminDashboardView.vue'),
@@ -241,9 +234,8 @@ const router = createRouter({
 // Navigation guard
 router.beforeEach(async (to, from, next) => {
     const authStore = useAuthStore()
-    console.log(`Navigating to: ${to.path}, Role: ${authStore.userRole}, Required: ${to.meta.requiresRole}`)
 
-    if (to.meta.requiresAuth || to.path.startsWith('/reports/')) { // Reports typically need auth
+    if (to.meta.requiresAuth || to.path.startsWith('/reports/')) {
         if (!authStore.isAuthenticated) {
             // Try to fetch current user
             const success = await authStore.fetchCurrentUser()

@@ -90,7 +90,6 @@ const orderedWidgets = computed(() => {
 })
 
 const formatCurrency = (amount, currency) => {
-  console.log(`Formatting: ${amount} | Currency: '${currency}'`)
   const code = (currency || 'LYD').trim().toUpperCase()
   let locale = 'ar-LY'
   

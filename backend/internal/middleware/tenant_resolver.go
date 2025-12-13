@@ -58,11 +58,7 @@ func (tr *TenantResolver) ResolveTenant() fiber.Handler {
 		// Skip tenant resolution for certain paths
 		path := c.Path()
 
-		// DEBUG: Log every request
-		log.Printf("[TenantResolver] Request: %s %s from host: %s", c.Method(), path, host)
-
 		if tr.shouldSkipResolution(path) {
-			log.Printf("[TenantResolver] Skipping resolution for path: %s", path)
 			return c.Next()
 		}
 
@@ -78,7 +74,6 @@ func (tr *TenantResolver) ResolveTenant() fiber.Handler {
 			// This is set by parsing the JWT token cookie/header
 			tenantDBFromJWT := tr.extractTenantFromJWT(c)
 			if tenantDBFromJWT != "" {
-				log.Printf("[TenantResolver] Using tenant DB from JWT: %s", tenantDBFromJWT)
 				c.Locals("tenant", &TenantContext{
 					OrganizationSlug: "jwt",
 					DatabaseName:     tenantDBFromJWT,
@@ -89,14 +84,10 @@ func (tr *TenantResolver) ResolveTenant() fiber.Handler {
 
 			// Default localhost to cso-erp (Template/Master DB acting as default tenant)
 			// This fixes "Database connection not found" when running locally without a tenant
-			log.Printf("[TenantResolver] Fallback to default: cso-erp")
 			tenantDB := tr.getTenantDB("cso-erp")
-			if tenantDB == nil {
-				log.Printf("[TenantResolver] ERROR: Failed to get cso-erp connection!")
-			}
 			c.Locals("tenant", &TenantContext{
 				OrganizationSlug: "default",
-				DatabaseName:     "cso-erp", // Use the main DB for localhost
+				DatabaseName:     "cso-erp",
 			})
 			c.Locals("tenantDB", &DBHolder{DB: tenantDB})
 			return c.Next()

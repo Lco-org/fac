@@ -188,10 +188,7 @@ export const useAuthStore = defineStore('auth', () => {
             const response = await api.get('/users/me')
             user.value = response.data
             return true
-            user.value = response.data
-            return true
         } catch (error) {
-            // If failed, try SSA
             return await fetchSSAUser()
         }
     }
@@ -228,7 +225,6 @@ export const useAuthStore = defineStore('auth', () => {
         logout,
         revokeAllSessions,
         changePassword,
-        toggle2FA,
         toggle2FA,
         fetchCurrentUser,
         fetchSSAUser,

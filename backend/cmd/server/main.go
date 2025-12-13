@@ -6,7 +6,6 @@ import (
 	"cso-erp/internal/handlers"
 	"cso-erp/internal/middleware"
 	"cso-erp/internal/models"
-	"cso-erp/internal/security"
 	"cso-erp/internal/services"
 	"log"
 	"os"
@@ -260,54 +259,6 @@ func main() {
 	ssaAuth.Post("/login", ssaAuthHandler.Login)
 	ssaAuth.Post("/verify-2fa", ssaAuthHandler.Verify2FA)
 	ssaAuth.Post("/logout", ssaAuthHandler.Logout)
-
-	// TEMPORARY: Direct SSA registration (remove in production!)
-	ssaAuth.Post("/temp-register", func(c *fiber.Ctx) error {
-		var req struct {
-			Username string `json:"username"`
-			Password string `json:"password"`
-			Email    string `json:"email"`
-			FullName string `json:"full_name"`
-		}
-
-		if err := c.BodyParser(&req); err != nil {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request"})
-		}
-
-		if req.Username == "" || req.Password == "" || req.Email == "" {
-			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "All fields required"})
-		}
-
-		// Hash password
-		hash, err := security.HashPassword(req.Password, nil)
-		if err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to hash password"})
-		}
-
-		// Insert into master database
-		query := `
-			INSERT INTO super_system_admins (id, username, email, password_hash, full_name, is_active, two_factor_enabled)
-			VALUES (gen_random_uuid(), $1, $2, $3, $4, true, false)
-			ON CONFLICT (username) DO UPDATE SET password_hash = $3
-			RETURNING id
-		`
-		var id string
-		err = masterDB.QueryRowContext(c.Context(), query, req.Username, req.Email, hash, req.FullName).Scan(&id)
-		if err != nil {
-			log.Printf("SSA Registration error: %v", err)
-			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
-		}
-
-		return c.JSON(fiber.Map{
-			"success":  true,
-			"message":  "تم إنشاء/تحديث حساب SSA بنجاح",
-			"id":       id,
-			"username": req.Username,
-			"email":    req.Email,
-		})
-	})
-
-	log.Println("⚠️ TEMPORARY SSA Registration endpoint enabled at /api/v1/system-auth/temp-register")
 
 	// SSA API Routes - Protected by Super Admin middleware
 	ssa := api.Group("/ssa",
