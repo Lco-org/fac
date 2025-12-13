@@ -188,6 +188,21 @@ export const useAuthStore = defineStore('auth', () => {
             const response = await api.get('/users/me')
             user.value = response.data
             return true
+            user.value = response.data
+            return true
+        } catch (error) {
+            // If failed, try SSA
+            return await fetchSSAUser()
+        }
+    }
+
+    // Fetch SSA User
+    const fetchSSAUser = async () => {
+        try {
+            // Use specific SSA endpoint to avoid 401 loop
+            const response = await api.get('/ssa/me')
+            user.value = response.data
+            return true
         } catch (error) {
             user.value = null
             return false
@@ -214,6 +229,8 @@ export const useAuthStore = defineStore('auth', () => {
         revokeAllSessions,
         changePassword,
         toggle2FA,
+        toggle2FA,
         fetchCurrentUser,
+        fetchSSAUser,
     }
 })

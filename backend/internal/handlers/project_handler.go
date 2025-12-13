@@ -9,18 +9,32 @@ import (
 	"github.com/google/uuid"
 )
 
-type ProjectHandler struct {
-	projectService *services.ProjectService
-}
+// ProjectHandler handles project-related requests
+// Multi-tenant: creates service per-request from context DB
+type ProjectHandler struct{}
 
 func NewProjectHandler(projectService *services.ProjectService) *ProjectHandler {
-	return &ProjectHandler{
-		projectService: projectService,
+	return &ProjectHandler{}
+}
+
+// getService creates a tenant-scoped ProjectService from request context
+func (h *ProjectHandler) getService(c *fiber.Ctx) *services.ProjectService {
+	db := middleware.GetTenantDB(c)
+	if db == nil {
+		return nil
 	}
+	return services.NewProjectService(db)
 }
 
 func (h *ProjectHandler) ListProjects(c *fiber.Ctx) error {
-	projects, err := h.projectService.ListProjects(c.Context())
+	svc := h.getService(c)
+	if svc == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Database connection not found",
+		})
+	}
+
+	projects, err := svc.ListProjects(c.Context())
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch projects",
@@ -31,6 +45,13 @@ func (h *ProjectHandler) ListProjects(c *fiber.Ctx) error {
 }
 
 func (h *ProjectHandler) GetProject(c *fiber.Ctx) error {
+	svc := h.getService(c)
+	if svc == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Database connection not found",
+		})
+	}
+
 	idParam := c.Params("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
@@ -39,7 +60,7 @@ func (h *ProjectHandler) GetProject(c *fiber.Ctx) error {
 		})
 	}
 
-	project, err := h.projectService.GetProjectByID(c.Context(), id)
+	project, err := svc.GetProjectByID(c.Context(), id)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "Project not found",
@@ -50,6 +71,13 @@ func (h *ProjectHandler) GetProject(c *fiber.Ctx) error {
 }
 
 func (h *ProjectHandler) CreateProject(c *fiber.Ctx) error {
+	svc := h.getService(c)
+	if svc == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Database connection not found",
+		})
+	}
+
 	var req models.CreateProjectRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -66,7 +94,7 @@ func (h *ProjectHandler) CreateProject(c *fiber.Ctx) error {
 
 	userID := middleware.GetUserID(c)
 
-	project, err := h.projectService.CreateProject(c.Context(), &req, userID)
+	project, err := svc.CreateProject(c.Context(), &req, userID)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
@@ -77,6 +105,13 @@ func (h *ProjectHandler) CreateProject(c *fiber.Ctx) error {
 }
 
 func (h *ProjectHandler) UpdateProject(c *fiber.Ctx) error {
+	svc := h.getService(c)
+	if svc == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Database connection not found",
+		})
+	}
+
 	idParam := c.Params("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
@@ -92,7 +127,7 @@ func (h *ProjectHandler) UpdateProject(c *fiber.Ctx) error {
 		})
 	}
 
-	project, err := h.projectService.UpdateProject(c.Context(), id, &req)
+	project, err := svc.UpdateProject(c.Context(), id, &req)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": err.Error(),
@@ -103,6 +138,13 @@ func (h *ProjectHandler) UpdateProject(c *fiber.Ctx) error {
 }
 
 func (h *ProjectHandler) DeleteProject(c *fiber.Ctx) error {
+	svc := h.getService(c)
+	if svc == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Database connection not found",
+		})
+	}
+
 	idParam := c.Params("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
@@ -111,7 +153,7 @@ func (h *ProjectHandler) DeleteProject(c *fiber.Ctx) error {
 		})
 	}
 
-	if err := h.projectService.DeleteProject(c.Context(), id); err != nil {
+	if err := svc.DeleteProject(c.Context(), id); err != nil {
 		if err == services.ErrProjectNotFound {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 				"error": "Project not found",

@@ -163,6 +163,76 @@ func (s *EmailService) SendOTPEmail(ctx context.Context, toEmail, toName, code s
 	return s.SendEmail(ctx, toEmail, subject, body, true)
 }
 
+// SendSSA2FACode sends 2FA code for Super System Admin login
+func (s *EmailService) SendSSA2FACode(ctx context.Context, toEmail, toName, code string) error {
+	if err := validateEmail(toEmail); err != nil {
+		return err
+	}
+
+	toName = sanitizeHeader(toName)
+
+	subject := "🔐 رمز التحقق - لوحة تحكم مشرف النظام"
+	body := fmt.Sprintf(`<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; direction: rtl; margin: 0; padding: 0; background-color: #0f172a; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #7c3aed 0%%, #4f46e5 100%%); color: white; padding: 30px; text-align: center; border-radius: 12px 12px 0 0; }
+        .header h1 { margin: 0; font-size: 24px; }
+        .header .badge { display: inline-block; background: rgba(255,255,255,0.2); padding: 5px 15px; border-radius: 20px; font-size: 12px; margin-top: 10px; }
+        .content { background: #1e293b; padding: 30px; border: 1px solid #334155; color: #e2e8f0; }
+        .code-box { background: linear-gradient(135deg, #7c3aed 0%%, #4f46e5 100%%); color: white; font-size: 36px; letter-spacing: 10px; padding: 25px; text-align: center; margin: 25px 0; border-radius: 12px; font-family: 'Courier New', monospace; font-weight: bold; box-shadow: 0 10px 30px rgba(124, 58, 237, 0.3); }
+        .warning { color: #fbbf24; font-size: 14px; margin-top: 25px; padding: 15px; background: rgba(251, 191, 36, 0.1); border-radius: 8px; border-right: 4px solid #fbbf24; }
+        .security-info { background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 8px; padding: 15px; margin-top: 20px; }
+        .security-info h4 { color: #ef4444; margin: 0 0 10px 0; }
+        .footer { background: #0f172a; color: #64748b; padding: 20px; text-align: center; font-size: 12px; border-radius: 0 0 12px 12px; }
+        .shield { font-size: 48px; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="shield">🛡️</div>
+            <h1>لوحة تحكم مشرف النظام</h1>
+            <div class="badge">SUPER SYSTEM ADMIN</div>
+        </div>
+        <div class="content">
+            <p>مرحباً <strong>%s</strong>،</p>
+            <p>تم تسجيل محاولة دخول إلى لوحة تحكم مشرف النظام. استخدم رمز التحقق التالي:</p>
+            <div class="code-box">%s</div>
+            <p style="text-align: center; color: #94a3b8;">⏱️ صلاحية الرمز: <strong style="color: #22c55e;">10 دقائق</strong></p>
+            
+            <div class="warning">
+                ⚠️ <strong>تنبيه أمني شديد:</strong><br>
+                هذا الرمز يمنح وصولاً كاملاً لإدارة جميع المنظمات. إذا لم تكن أنت من طلب تسجيل الدخول، قم فوراً بما يلي:
+                <ul style="margin: 10px 0; padding-right: 20px;">
+                    <li>لا تشارك هذا الرمز مع أي شخص</li>
+                    <li>تواصل مع فريق الأمان فوراً</li>
+                    <li>قم بتغيير كلمة المرور</li>
+                </ul>
+            </div>
+            
+            <div class="security-info">
+                <h4>🔒 معلومات الجلسة</h4>
+                <p style="margin: 5px 0; font-size: 13px;">الوقت: %s</p>
+                <p style="margin: 5px 0; font-size: 13px;">النوع: تسجيل دخول مشرف أعلى</p>
+            </div>
+        </div>
+        <div class="footer">
+            <p>هذا بريد آلي عالي الأمان من نظام CSO ERP</p>
+            <p>© منظمة LCO - جميع الحقوق محفوظة</p>
+        </div>
+    </div>
+</body>
+</html>`, toName, code, time.Now().Format("2006-01-02 15:04:05"))
+
+	return s.SendEmail(ctx, toEmail, subject, body, true)
+}
+
 // SendWelcomeEmail sends a welcome message to newly created users
 func (s *EmailService) SendWelcomeEmail(ctx context.Context, toEmail, fullName, username, role string) error {
 	if err := validateEmail(toEmail); err != nil {
@@ -245,6 +315,147 @@ func (s *EmailService) SendWelcomeEmail(ctx context.Context, toEmail, fullName, 
     </div>
 </body>
 </html>`, fullName, username, toEmail, roleArabic, time.Now().Format("2006-01-02 15:04:05"))
+
+	return s.SendEmail(ctx, toEmail, subject, body, true)
+}
+
+// SendVerificationCode sends a domain verification code for new organization setup
+func (s *EmailService) SendVerificationCode(toEmail, orgName, code string) error {
+	if err := validateEmail(toEmail); err != nil {
+		return err
+	}
+
+	orgName = sanitizeHeader(orgName)
+
+	subject := fmt.Sprintf("رمز التحقق - %s", orgName)
+	body := fmt.Sprintf(`<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; direction: rtl; margin: 0; padding: 0; background-color: #f4f4f4; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #059669 0%%, #10b981 100%%); color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0; }
+        .content { background: #ffffff; padding: 30px; border: 1px solid #e5e7eb; }
+        .code-box { background: #059669; color: white; font-size: 36px; letter-spacing: 10px; padding: 25px; text-align: center; margin: 25px 0; border-radius: 10px; font-family: monospace; font-weight: bold; }
+        .org-name { background: #f0fdf4; border: 1px solid #86efac; padding: 15px; border-radius: 8px; margin: 15px 0; }
+        .warning { color: #dc2626; font-size: 14px; margin-top: 20px; padding: 15px; background: #fef2f2; border-radius: 6px; border-right: 4px solid #dc2626; }
+        .footer { background: #374151; color: #9ca3af; padding: 15px; text-align: center; font-size: 12px; border-radius: 0 0 8px 8px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏢 تفعيل المنظمة الجديدة</h1>
+        </div>
+        <div class="content">
+            <p>مرحباً،</p>
+            <p>تم طلب تفعيل منظمة جديدة في نظام ERP:</p>
+            
+            <div class="org-name">
+                <strong>اسم المنظمة:</strong> %s
+            </div>
+            
+            <p>استخدم رمز التحقق التالي لإكمال عملية التفعيل:</p>
+            <div class="code-box">%s</div>
+            
+            <p>⏱️ <strong>صلاحية هذا الرمز: 5 دقائق فقط</strong></p>
+            
+            <div class="warning">
+                ⚠️ <strong>تحذير:</strong> إذا لم تطلب إنشاء هذه المنظمة، يرجى تجاهل هذا البريد أو التواصل مع الدعم الفني.
+            </div>
+        </div>
+        <div class="footer">
+            <p>هذا بريد آلي من نظام ERP</p>
+            <p>© LCO - جميع الحقوق محفوظة</p>
+        </div>
+    </div>
+</body>
+</html>`, orgName, code)
+
+	ctx := context.Background()
+	return s.SendEmail(ctx, toEmail, subject, body, true)
+}
+
+// SendTenantWelcomeEmail sends welcome email to new tenant admin with credentials
+func (s *EmailService) SendTenantWelcomeEmail(ctx context.Context, toEmail, fullName, orgName, username, password, loginURL string) error {
+	if err := validateEmail(toEmail); err != nil {
+		return err
+	}
+
+	fullName = sanitizeHeader(fullName)
+	orgName = sanitizeHeader(orgName)
+
+	subject := fmt.Sprintf("مرحباً بك في نظام %s", orgName)
+	body := fmt.Sprintf(`<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; direction: rtl; margin: 0; padding: 0; background-color: #f4f4f4; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #1a56db 0%%, #2563eb 100%%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
+        .header h1 { margin: 0; font-size: 28px; }
+        .content { background: #ffffff; padding: 30px; border: 1px solid #e5e7eb; }
+        .welcome-text { font-size: 18px; color: #1f2937; margin-bottom: 20px; }
+        .credentials-box { background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 10px; padding: 25px; margin: 20px 0; }
+        .credential-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #e2e8f0; }
+        .credential-row:last-child { border-bottom: none; }
+        .credential-label { color: #6b7280; font-weight: 500; }
+        .credential-value { color: #1f2937; font-weight: 700; font-family: monospace; background: #e0f2fe; padding: 4px 10px; border-radius: 4px; }
+        .login-btn { display: inline-block; background: #1a56db; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; margin: 20px 0; }
+        .warning { color: #b45309; font-size: 14px; margin-top: 20px; padding: 15px; background: #fef3c7; border-radius: 6px; border-right: 4px solid #f59e0b; }
+        .footer { background: #374151; color: #9ca3af; padding: 20px; text-align: center; font-size: 12px; border-radius: 0 0 8px 8px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎉 مرحباً بك في %s!</h1>
+        </div>
+        <div class="content">
+            <p class="welcome-text">مرحباً <strong>%s</strong>،</p>
+            <p>تم إنشاء حسابك كمدير نظام للمنظمة. فيما يلي بيانات الدخول الخاصة بك:</p>
+            
+            <div class="credentials-box">
+                <h3 style="margin-top: 0; color: #1a56db;">🔑 بيانات الدخول</h3>
+                <div class="credential-row">
+                    <span class="credential-label">اسم المستخدم:</span>
+                    <span class="credential-value">%s</span>
+                </div>
+                <div class="credential-row">
+                    <span class="credential-label">كلمة المرور:</span>
+                    <span class="credential-value">%s</span>
+                </div>
+                <div class="credential-row">
+                    <span class="credential-label">رابط الدخول:</span>
+                    <span class="credential-value">%s</span>
+                </div>
+            </div>
+            
+            <center>
+                <a href="%s" class="login-btn">🚀 الدخول إلى النظام</a>
+            </center>
+            
+            <div class="warning">
+                ⚠️ <strong>هام جداً:</strong> يرجى تغيير كلمة المرور فور تسجيل الدخول الأول، وتفعيل خاصية التحقق بخطوتين (2FA) لحماية حسابك.
+            </div>
+            
+            <p style="margin-top: 25px; font-size: 13px; color: #6b7280;">
+                تم إرسال هذه الرسالة في: %s
+            </p>
+        </div>
+        <div class="footer">
+            <p>هذا بريد آلي، يرجى عدم الرد عليه.</p>
+            <p>© %s - جميع الحقوق محفوظة</p>
+        </div>
+    </div>
+</body>
+</html>`, orgName, fullName, username, password, loginURL, loginURL, time.Now().Format("2006-01-02 15:04:05"), orgName)
 
 	return s.SendEmail(ctx, toEmail, subject, body, true)
 }
@@ -465,4 +676,115 @@ func (s *EmailService) SendEmail(ctx context.Context, to, subject, body string, 
 
 	log.Printf("Email sent to %s", to)
 	return client.Quit()
+}
+
+// ============================================================================
+// HIERARCHICAL SMTP SUPPORT (Tenant-Specific Configuration)
+// ============================================================================
+
+// TenantEmailConfig represents SMTP config from tenant database
+type TenantEmailConfig struct {
+	SMTPHost    string
+	SMTPPort    int
+	Username    string
+	Password    string // Decrypted password
+	FromAddress string
+	FromName    string
+	UseTLS      bool
+}
+
+// NewEmailServiceWithTenantConfig creates EmailService with tenant-specific SMTP
+func NewEmailServiceWithTenantConfig(tenantConfig *TenantEmailConfig) *EmailService {
+	if tenantConfig == nil || tenantConfig.SMTPHost == "" {
+		log.Println("Tenant SMTP not configured, will use master SMTP")
+		return nil // Signal to use master
+	}
+
+	config := &EmailConfig{
+		SMTPHost:    tenantConfig.SMTPHost,
+		SMTPPort:    fmt.Sprintf("%d", tenantConfig.SMTPPort),
+		Username:    tenantConfig.Username,
+		Password:    tenantConfig.Password,
+		FromAddress: tenantConfig.FromAddress,
+		FromName:    tenantConfig.FromName,
+		UseTLS:      tenantConfig.UseTLS,
+		SkipVerify:  false, // Always verify in production
+	}
+
+	if !emailRegex.MatchString(config.FromAddress) {
+		log.Printf("Invalid tenant FROM address: %s", config.FromAddress)
+		return nil
+	}
+
+	return &EmailService{config: config, mock: false}
+}
+
+// GetHierarchicalEmailService returns tenant EmailService or falls back to master
+// tenantService = EmailService from tenant SMTP settings (nil if not configured)
+// masterService = EmailService from master/system SMTP settings
+func GetHierarchicalEmailService(tenantService, masterService *EmailService) *EmailService {
+	if tenantService != nil && !tenantService.mock {
+		log.Println("Using tenant-specific SMTP configuration")
+		return tenantService
+	}
+	log.Println("Falling back to master SMTP configuration")
+	return masterService
+}
+
+// SendWithTemplate sends email using a custom template with variable substitution
+func (s *EmailService) SendWithTemplate(ctx context.Context, toEmail, subject, bodyHTML string, variables map[string]string) error {
+	if err := validateEmail(toEmail); err != nil {
+		return err
+	}
+
+	// Replace template variables
+	for key, value := range variables {
+		placeholder := "{{" + key + "}}"
+		subject = strings.ReplaceAll(subject, placeholder, sanitizeHeader(value))
+		bodyHTML = strings.ReplaceAll(bodyHTML, placeholder, value)
+	}
+
+	return s.SendEmail(ctx, toEmail, subject, bodyHTML, true)
+}
+
+// SendBulkWithTemplate sends bulk emails with template and per-recipient variables
+func (s *EmailService) SendBulkWithTemplate(ctx context.Context, recipients []EmailRecipient, subject, bodyHTML string, commonVars map[string]string) *BulkEmailResult {
+	result := &BulkEmailResult{
+		Total:     len(recipients),
+		FailedIDs: []string{},
+	}
+
+	for _, recipient := range recipients {
+		// Merge common vars with recipient-specific vars
+		vars := make(map[string]string)
+		for k, v := range commonVars {
+			vars[k] = v
+		}
+		vars["user_name"] = recipient.Name
+		vars["email"] = recipient.Email
+
+		err := s.SendWithTemplate(ctx, recipient.Email, subject, bodyHTML, vars)
+		if err != nil {
+			log.Printf("Failed to send to %s: %v", recipient.Email, err)
+			result.Failed++
+			result.FailedIDs = append(result.FailedIDs, recipient.ID)
+		} else {
+			result.Sent++
+		}
+
+		// Rate limiting
+		time.Sleep(time.Second / MaxEmailsPerMinute * 60)
+	}
+
+	return result
+}
+
+// GetConfig returns the email configuration (useful for testing)
+func (s *EmailService) GetConfig() *EmailConfig {
+	return s.config
+}
+
+// IsMock returns whether the service is in mock mode
+func (s *EmailService) IsMock() bool {
+	return s.mock
 }

@@ -137,6 +137,21 @@ const routes = [
                 component: () => import('@/views/reports/DetailedStatementView.vue'),
                 meta: { title: 'كشف حساب تفصيلي' }
             },
+            // ==========================================================================
+            // ORGANIZATION ADMIN SETTINGS ROUTES
+            // ==========================================================================
+            {
+                path: 'admin/email-templates',
+                name: 'EmailTemplates',
+                component: () => import('@/views/admin/EmailTemplateEditorView.vue'),
+                meta: { requiresRole: ['admin'], title: 'قوالب البريد الإلكتروني' },
+            },
+            {
+                path: 'admin/smtp-settings',
+                name: 'SMTPSettings',
+                component: () => import('@/views/admin/SMTPSettingsView.vue'),
+                meta: { requiresRole: ['admin'], title: 'إعدادات SMTP' },
+            },
             {
                 path: 'reports/daily-position',
                 name: 'DailyPosition',
@@ -156,6 +171,65 @@ const routes = [
         name: 'Receipt',
         component: () => import('@/views/ReceiptView.vue'),
         meta: { requiresAuth: true },
+    },
+    // ==========================================================================
+    // SUPER SYSTEM ADMIN (SSA) ROUTES - Hidden panel with secret URL
+    // ==========================================================================
+    // SSA Login - No auth required (it's for initial authentication)
+    {
+        path: '/b8fb17/ssa/login',
+        name: 'SSALogin',
+        component: () => import('@/views/ssa/SSALoginView.vue'),
+        meta: { title: 'تسجيل دخول المشرف الأعلى' },
+    },
+    // TEMPORARY: SSA Registration (remove in production!)
+    {
+        path: '/b8fb17/ssa/temp-register',
+        name: 'SSATempRegister',
+        component: () => import('@/views/ssa/SSATempRegisterView.vue'),
+        meta: { title: 'تسجيل SSA مؤقت' },
+    },
+    {
+        path: '/b8fb17/ssa',
+        component: () => import('@/views/ssa/SuperAdminDashboardView.vue'),
+        meta: { requiresAuth: true, requiresRole: ['system_admin'] },
+        children: [
+            {
+                path: '',
+                name: 'SSADashboard',
+                component: () => import('@/views/ssa/SuperAdminDashboardView.vue'),
+            },
+        ]
+    },
+    {
+        path: '/b8fb17/ssa/create',
+        name: 'SSACreateOrganization',
+        component: () => import('@/views/ssa/OrganizationCreateView.vue'),
+        meta: { requiresAuth: true, requiresRole: ['system_admin'] },
+    },
+    {
+        path: '/b8fb17/ssa/verify/:id',
+        name: 'SSAVerifyDomain',
+        component: () => import('@/views/ssa/DomainVerificationView.vue'),
+        meta: { requiresAuth: true, requiresRole: ['system_admin'] },
+    },
+    {
+        path: '/b8fb17/ssa/database/:id',
+        name: 'SSACreateDatabase',
+        component: () => import('@/views/ssa/DatabaseSetupView.vue'),
+        meta: { requiresAuth: true, requiresRole: ['system_admin'] },
+    },
+    {
+        path: '/b8fb17/ssa/admin/:id',
+        name: 'SSACreateAdmin',
+        component: () => import('@/views/ssa/TenantAdminSetupView.vue'),
+        meta: { requiresAuth: true, requiresRole: ['system_admin'] },
+    },
+    {
+        path: '/b8fb17/ssa/organization/:id',
+        name: 'SSAOrganizationDetail',
+        component: () => import('@/views/ssa/OrganizationDetailView.vue'),
+        meta: { requiresAuth: true, requiresRole: ['system_admin'] },
     },
 ]
 

@@ -5,19 +5,24 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	App      AppConfig
-	Database DatabaseConfig
-	JWT      JWTConfig
-	Security SecurityConfig
-	CORS     CORSConfig
-	Upload   UploadConfig
-	Email    EmailConfig
+	App         AppConfig
+	Database    DatabaseConfig
+	JWT         JWTConfig
+	Security    SecurityConfig
+	CORS        CORSConfig
+	Upload      UploadConfig
+	Email       EmailConfig
+	MultiTenant MultiTenantConfig
+
+	// Legacy field - use MultiTenant.AllowedSSAIPs instead
+	AllowedSSAIPs []string
 }
 
 type AppConfig struct {
@@ -72,6 +77,23 @@ type EmailConfig struct {
 	SkipVerify  bool
 }
 
+// MultiTenantConfig for Super System Admin and multi-tenant features
+type MultiTenantConfig struct {
+	// Master database for organization management
+	MasterDBName string
+	// Template database for cloning tenant schemas
+	TemplateDBName string
+	// Prefix for tenant database names
+	TenantDBPrefix string
+	// IPs allowed for SSA access
+	AllowedSSAIPs []string
+	// Verification code settings
+	VerificationCodeExpiry  time.Duration
+	MaxVerificationAttempts int
+	// Billing feature toggle
+	BillingEnabled bool
+}
+
 func Load() *Config {
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, using environment variables")
@@ -80,6 +102,7 @@ func Load() *Config {
 	jwtExpiry, _ := time.ParseDuration(getEnv("JWT_EXPIRY", "3h"))
 	jwtRefreshExpiry, _ := time.ParseDuration(getEnv("JWT_REFRESH_EXPIRY", "168h"))
 	rateLimitWindow, _ := time.ParseDuration(getEnv("RATE_LIMIT_WINDOW", "1m"))
+	verificationExpiry, _ := time.ParseDuration(getEnv("VERIFICATION_CODE_EXPIRY", "5m"))
 
 	encryptionKey := parseEncryptionKey(getEnv("ENCRYPTION_KEY", ""))
 
@@ -129,6 +152,16 @@ func Load() *Config {
 			UseTLS:      getEnvAsBool("SMTP_USE_TLS", true),
 			SkipVerify:  getEnvAsBool("SMTP_SKIP_VERIFY", false),
 		},
+		MultiTenant: MultiTenantConfig{
+			MasterDBName:            getEnv("MASTER_DB_NAME", "erp_master"),
+			TemplateDBName:          getEnv("TENANT_DB_TEMPLATE", "cso-erp"),
+			TenantDBPrefix:          getEnv("TENANT_DB_PREFIX", ""),
+			AllowedSSAIPs:           parseSSAIPs(getEnv("ALLOWED_SSA_IPS", "127.0.0.1,::1")),
+			VerificationCodeExpiry:  verificationExpiry,
+			MaxVerificationAttempts: getEnvAsInt("MAX_VERIFICATION_ATTEMPTS", 3),
+			BillingEnabled:          getEnvAsBool("BILLING_ENABLED", false),
+		},
+		AllowedSSAIPs: parseSSAIPs(getEnv("ALLOWED_SSA_IPS", "127.0.0.1,::1")),
 	}
 }
 
@@ -181,4 +214,25 @@ func getEnvAsBool(key string, defaultValue bool) bool {
 		return value
 	}
 	return defaultValue
+}
+
+// parseSSAIPs parses comma-separated IP list for SSA allowlist
+func parseSSAIPs(ipList string) []string {
+	if ipList == "" {
+		return []string{"127.0.0.1", "::1"}
+	}
+
+	ips := make([]string, 0)
+	for _, ip := range strings.Split(ipList, ",") {
+		trimmed := strings.TrimSpace(ip)
+		if trimmed != "" {
+			ips = append(ips, trimmed)
+		}
+	}
+
+	if len(ips) == 0 {
+		return []string{"127.0.0.1", "::1"}
+	}
+
+	return ips
 }

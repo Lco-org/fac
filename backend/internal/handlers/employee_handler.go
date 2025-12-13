@@ -9,16 +9,30 @@ import (
 	"github.com/google/uuid"
 )
 
-type EmployeeHandler struct {
-	employeeService *services.EmployeeService
-}
+// EmployeeHandler handles employee-related requests
+// Multi-tenant: creates service per-request from context DB
+type EmployeeHandler struct{}
 
 func NewEmployeeHandler(employeeService *services.EmployeeService) *EmployeeHandler {
-	return &EmployeeHandler{employeeService: employeeService}
+	return &EmployeeHandler{}
+}
+
+// getService creates a tenant-scoped EmployeeService from request context
+func (h *EmployeeHandler) getService(c *fiber.Ctx) *services.EmployeeService {
+	db := middleware.GetTenantDB(c)
+	if db == nil {
+		return nil
+	}
+	return services.NewEmployeeService(db)
 }
 
 func (h *EmployeeHandler) ListEmployees(c *fiber.Ctx) error {
-	employees, err := h.employeeService.ListEmployees(c.Context())
+	svc := h.getService(c)
+	if svc == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Database connection not found"})
+	}
+
+	employees, err := svc.ListEmployees(c.Context())
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch employees"})
 	}
@@ -26,12 +40,17 @@ func (h *EmployeeHandler) ListEmployees(c *fiber.Ctx) error {
 }
 
 func (h *EmployeeHandler) GetEmployee(c *fiber.Ctx) error {
+	svc := h.getService(c)
+	if svc == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Database connection not found"})
+	}
+
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid employee ID"})
 	}
 
-	employee, err := h.employeeService.GetEmployeeByID(c.Context(), id)
+	employee, err := svc.GetEmployeeByID(c.Context(), id)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Employee not found"})
 	}
@@ -39,6 +58,11 @@ func (h *EmployeeHandler) GetEmployee(c *fiber.Ctx) error {
 }
 
 func (h *EmployeeHandler) CreateEmployee(c *fiber.Ctx) error {
+	svc := h.getService(c)
+	if svc == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Database connection not found"})
+	}
+
 	var req models.CreateEmployeeRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
@@ -49,7 +73,7 @@ func (h *EmployeeHandler) CreateEmployee(c *fiber.Ctx) error {
 	}
 
 	userID := middleware.GetUserID(c)
-	employee, err := h.employeeService.CreateEmployee(c.Context(), &req, userID)
+	employee, err := svc.CreateEmployee(c.Context(), &req, userID)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -58,6 +82,11 @@ func (h *EmployeeHandler) CreateEmployee(c *fiber.Ctx) error {
 }
 
 func (h *EmployeeHandler) UpdateEmployee(c *fiber.Ctx) error {
+	svc := h.getService(c)
+	if svc == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Database connection not found"})
+	}
+
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid employee ID"})
@@ -68,7 +97,7 @@ func (h *EmployeeHandler) UpdateEmployee(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
 	}
 
-	employee, err := h.employeeService.UpdateEmployee(c.Context(), id, &req)
+	employee, err := svc.UpdateEmployee(c.Context(), id, &req)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -77,12 +106,17 @@ func (h *EmployeeHandler) UpdateEmployee(c *fiber.Ctx) error {
 }
 
 func (h *EmployeeHandler) DeleteEmployee(c *fiber.Ctx) error {
+	svc := h.getService(c)
+	if svc == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Database connection not found"})
+	}
+
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid employee ID"})
 	}
 
-	if err := h.employeeService.DeleteEmployee(c.Context(), id); err != nil {
+	if err := svc.DeleteEmployee(c.Context(), id); err != nil {
 		if err == services.ErrEmployeeNotFound {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Employee not found"})
 		}

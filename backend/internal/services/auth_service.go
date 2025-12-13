@@ -53,7 +53,7 @@ func (s *AuthService) Login(ctx context.Context, username, password string) (*Lo
 		SELECT id, username, email, password_hash, full_name, full_name_ar, 
 		       role, token_version, two_factor_enabled, is_active, created_at
 		FROM users
-		WHERE LOWER(username) = LOWER($1) OR LOWER(email) = LOWER($1)
+		WHERE LOWER(email) = LOWER($1)
 	`, username).Scan(
 		&user.ID,
 		&user.Username,

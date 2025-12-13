@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"cso-erp/internal/database"
@@ -124,26 +125,49 @@ func (s *ContainerService) UpdateContainer(ctx context.Context, id uuid.UUID, re
 }
 
 func (s *ContainerService) DeleteContainer(ctx context.Context, id uuid.UUID) error {
-	// First, delete all transactions related to this container
-	_, err := s.db.ExecContext(ctx, `
+	log.Printf("[DeleteContainer] Starting delete for container: %s", id)
+
+	// First, delete all reversal transactions (those referencing original transactions in this container)
+	// This handles the original_transaction_id FK constraint
+	result, err := s.db.ExecContext(ctx, `
+		DELETE FROM transactions 
+		WHERE original_transaction_id IN (
+			SELECT id FROM transactions WHERE container_id = $1
+		)
+	`, id)
+	if err != nil {
+		log.Printf("[DeleteContainer] Failed to delete reversal transactions: %v", err)
+		return err
+	}
+	reversalRows, _ := result.RowsAffected()
+	log.Printf("[DeleteContainer] Deleted %d reversal transactions", reversalRows)
+
+	// Then delete all transactions for this container
+	result, err = s.db.ExecContext(ctx, `
 		DELETE FROM transactions WHERE container_id = $1
 	`, id)
 	if err != nil {
+		log.Printf("[DeleteContainer] Failed to delete transactions: %v", err)
 		return err
 	}
+	txRows, _ := result.RowsAffected()
+	log.Printf("[DeleteContainer] Deleted %d transactions", txRows)
 
-	// Then delete the container
-	result, err := s.db.ExecContext(ctx, `
+	// Finally delete the container
+	result, err = s.db.ExecContext(ctx, `
 		DELETE FROM financial_containers WHERE id = $1
 	`, id)
 	if err != nil {
+		log.Printf("[DeleteContainer] Failed to delete container: %v", err)
 		return err
 	}
 
 	rows, _ := result.RowsAffected()
 	if rows == 0 {
+		log.Printf("[DeleteContainer] Container not found: %s", id)
 		return ErrContainerNotFound
 	}
 
+	log.Printf("[DeleteContainer] Successfully deleted container: %s", id)
 	return nil
 }

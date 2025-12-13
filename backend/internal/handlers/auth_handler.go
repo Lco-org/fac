@@ -2,10 +2,13 @@ package handlers
 
 import (
 	"cso-erp/internal/config"
+	"cso-erp/internal/database"
 	"cso-erp/internal/middleware"
 	"cso-erp/internal/models"
 	"cso-erp/internal/security"
 	"cso-erp/internal/services"
+	"log"
+	"strings"
 	"time"
 
 	"github.com/gofiber/fiber/v2"
@@ -13,18 +16,96 @@ import (
 )
 
 type AuthHandler struct {
-	authService *services.AuthService
-	cfg         *config.Config
+	masterDB     *database.DB
+	cfg          *config.Config
+	emailService *services.EmailService // Master email service
 }
 
-func NewAuthHandler(authService *services.AuthService, cfg *config.Config) *AuthHandler {
+func NewAuthHandler(masterDB *database.DB, cfg *config.Config, emailService *services.EmailService) *AuthHandler {
 	return &AuthHandler{
-		authService: authService,
-		cfg:         cfg,
+		masterDB:     masterDB,
+		cfg:          cfg,
+		emailService: emailService,
 	}
 }
 
+// getTenantService creates a request-scoped AuthService with tenant DB and SMTP
+func (h *AuthHandler) getTenantService(c *fiber.Ctx) (*services.AuthService, error) {
+	var db *database.DB
+
+	// Priority 1: Check for tenant_db from JWT claims (set by AuthMiddleware)
+	// This ensures authenticated users always use their correct tenant database
+	if tenantDBName := middleware.GetTenantDBName(c); tenantDBName != "" {
+		tenantConfig := &config.DatabaseConfig{
+			Host:     h.cfg.Database.Host,
+			Port:     h.cfg.Database.Port,
+			User:     h.cfg.Database.User,
+			Password: h.cfg.Database.Password,
+			DBName:   tenantDBName,
+			SSLMode:  h.cfg.Database.SSLMode,
+		}
+
+		var err error
+		db, err = database.Connect(tenantConfig)
+		if err != nil {
+			log.Printf("[getTenantService] Failed to connect to JWT tenant DB '%s': %v", tenantDBName, err)
+		} else {
+			log.Printf("[getTenantService] Using tenant DB from JWT: %s", tenantDBName)
+		}
+	}
+
+	// Priority 2: Fall back to TenantResolver's context (for unauthenticated routes like login)
+	if db == nil {
+		db = middleware.GetTenantDB(c)
+	}
+
+	if db == nil {
+		return nil, fiber.NewError(fiber.StatusInternalServerError, "Database connection not found")
+	}
+
+	// Setup SMTP Service for this tenant
+	smtpService := services.NewSMTPSettingsService(db, h.cfg)
+
+	// Get default SMTP settings
+	// We use background context as we don't want to cancel if request cancels (maybe?)
+	// Actually, using request context is fine.
+	smtpSettings, err := smtpService.GetDefaultSMTPSettings(c.Context())
+
+	var tenantEmailService *services.EmailService
+	if err == nil && smtpSettings != nil {
+		// Decrypt password
+		password, _ := smtpService.GetDecryptedPassword(c.Context(), smtpSettings.ID)
+
+		fromName := ""
+		if smtpSettings.FromName != nil {
+			fromName = *smtpSettings.FromName
+		}
+
+		tenantConfig := &services.TenantEmailConfig{
+			SMTPHost:    smtpSettings.SMTPHost,
+			SMTPPort:    smtpSettings.SMTPPort,
+			Username:    smtpSettings.Username,
+			Password:    password,
+			FromAddress: smtpSettings.FromAddress,
+			FromName:    fromName,
+			UseTLS:      smtpSettings.UseTLS,
+		}
+		tenantEmailService = services.NewEmailServiceWithTenantConfig(tenantConfig)
+	}
+
+	// Use hierarchical email service (Tenant > Master)
+	finalEmailService := services.GetHierarchicalEmailService(tenantEmailService, h.emailService)
+
+	// Create AuthService with Tenant DB and correct Email Service
+	return services.NewAuthService(db, h.cfg, finalEmailService), nil
+}
+
 func (h *AuthHandler) Register(c *fiber.Ctx) error {
+	svc, err := h.getTenantService(c)
+	if err != nil {
+		return err
+	}
+
 	var req models.CreateUserRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -40,7 +121,7 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 
 	nilUUID := uuid.Nil
 
-	user, err := h.authService.CreateUser(
+	user, err := svc.CreateUser(
 		c.Context(),
 		req.Username,
 		req.Email,
@@ -67,7 +148,7 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	}
 
 	username := user.Username
-	h.logAuditAction(c, security.ActionUserCreate, "user", &user.ID, &username, security.AuditDetails(map[string]interface{}{
+	h.logAuditAction(c, svc.GetAuditService(), security.ActionUserCreate, "user", &user.ID, &username, security.AuditDetails(map[string]interface{}{
 		"email": user.Email,
 		"role":  user.Role,
 	}))
@@ -80,6 +161,7 @@ func (h *AuthHandler) Register(c *fiber.Ctx) error {
 
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	var req models.LoginRequest
+	// Parse body first to check email domain if needed
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Invalid request format",
@@ -92,9 +174,57 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		})
 	}
 
-	result, err := h.authService.Login(c.Context(), req.Username, req.Password)
+	// SMART LOGIN: Always try email domain lookup FIRST
+	// This ensures users are directed to their correct tenant database regardless of URL
+	var svc *services.AuthService
+
+	email := req.Username
+	parts := strings.Split(email, "@")
+	if len(parts) == 2 {
+		domain := parts[1]
+
+		// Lookup tenant by domain in MasterDB
+		var dbName string
+		lookupErr := h.masterDB.QueryRowContext(c.Context(), `
+			SELECT database_name FROM organizations 
+			WHERE (primary_domain = $1 OR id IN (SELECT organization_id FROM allowed_domains WHERE domain = $1))
+			AND status = 'active'
+		`, domain).Scan(&dbName)
+
+		if lookupErr == nil && dbName != "" {
+			// Found tenant by email domain! Connect to it
+			tenantConfig := &config.DatabaseConfig{
+				Host:     h.cfg.Database.Host,
+				Port:     h.cfg.Database.Port,
+				User:     h.cfg.Database.User,
+				Password: h.cfg.Database.Password,
+				DBName:   dbName,
+				SSLMode:  h.cfg.Database.SSLMode,
+			}
+
+			if tenantDB, connErr := database.Connect(tenantConfig); connErr == nil {
+				log.Printf("[SmartLogin] Matched email domain '%s' to database '%s'", domain, dbName)
+				svc = services.NewAuthService(tenantDB, h.cfg, h.emailService)
+				// Store tenant DB name for token generation
+				c.Locals("login_tenant_db", dbName)
+			}
+		}
+	}
+
+	// Fallback: If no tenant found by email domain, use TenantResolver's default
+	if svc == nil {
+		var err error
+		svc, err = h.getTenantService(c)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "خطأ في الاتصال بقاعدة البيانات. يرجى التأكد من الرابط المستخدم.",
+			})
+		}
+	}
+
+	result, err := svc.Login(c.Context(), req.Username, req.Password)
 	if err != nil {
-		h.logAuditAction(c, security.ActionLoginFailed, "auth", nil, &req.Username, security.AuditDetails(map[string]interface{}{
+		h.logAuditAction(c, svc.GetAuditService(), security.ActionLoginFailed, "auth", nil, &req.Username, security.AuditDetails(map[string]interface{}{
 			"reason": "Invalid credentials",
 		}))
 
@@ -116,10 +246,15 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 		})
 	}
 
-	return h.completeLogin(c, result.User)
+	return h.completeLogin(c, svc, result.User)
 }
 
 func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
+	svc, err := h.getTenantService(c)
+	if err != nil {
+		return err
+	}
+
 	var req struct {
 		UserID string `json:"user_id"`
 		Code   string `json:"code"`
@@ -144,7 +279,7 @@ func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 		})
 	}
 
-	user, err := h.authService.Verify2FA(c.Context(), userID, req.Code)
+	user, err := svc.Verify2FA(c.Context(), userID, req.Code)
 	if err != nil {
 		switch err {
 		case security.ErrOTPExpired:
@@ -170,10 +305,15 @@ func (h *AuthHandler) Verify2FA(c *fiber.Ctx) error {
 		}
 	}
 
-	return h.completeLogin(c, user)
+	return h.completeLogin(c, svc, user)
 }
 
 func (h *AuthHandler) ResendOTP(c *fiber.Ctx) error {
+	svc, err := h.getTenantService(c)
+	if err != nil {
+		return err
+	}
+
 	var req struct {
 		UserID string `json:"user_id"`
 	}
@@ -191,7 +331,7 @@ func (h *AuthHandler) ResendOTP(c *fiber.Ctx) error {
 		})
 	}
 
-	err = h.authService.ResendOTP(c.Context(), userID)
+	err = svc.ResendOTP(c.Context(), userID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to send verification code",
@@ -203,8 +343,17 @@ func (h *AuthHandler) ResendOTP(c *fiber.Ctx) error {
 	})
 }
 
-func (h *AuthHandler) completeLogin(c *fiber.Ctx, user *models.User) error {
-	token, err := middleware.GenerateToken(user, &h.cfg.JWT)
+func (h *AuthHandler) completeLogin(c *fiber.Ctx, svc *services.AuthService, user *models.User) error {
+	// Get tenant DB from Smart Login path (stored in c.Locals during login)
+	tenantDB := ""
+	if tdb, ok := c.Locals("login_tenant_db").(string); ok && tdb != "" {
+		tenantDB = tdb
+	} else if tdb := middleware.GetTenantDBName(c); tdb != "" {
+		// Fallback to tenant from TenantResolver if no Smart Login DB
+		tenantDB = tdb
+	}
+
+	token, err := middleware.GenerateTokenWithTenant(user, &h.cfg.JWT, tenantDB)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Session creation failed",
@@ -222,7 +371,7 @@ func (h *AuthHandler) completeLogin(c *fiber.Ctx, user *models.User) error {
 	})
 
 	username := user.Username
-	h.logAuditAction(c, security.ActionLogin, "auth", &user.ID, &username, security.AuditDetails(map[string]interface{}{
+	h.logAuditAction(c, svc.GetAuditService(), security.ActionLogin, "auth", &user.ID, &username, security.AuditDetails(map[string]interface{}{
 		"role": user.Role,
 	}))
 
@@ -237,7 +386,10 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	username := middleware.GetUsername(c)
 
 	if userID != uuid.Nil {
-		h.logAuditAction(c, security.ActionLogout, "auth", &userID, &username, "{}")
+		// Try to log audit, but don't fail if we can't get service (e.g. DB issue)
+		if svc, err := h.getTenantService(c); err == nil {
+			h.logAuditAction(c, svc.GetAuditService(), security.ActionLogout, "auth", &userID, &username, "{}")
+		}
 	}
 
 	c.Cookie(&fiber.Cookie{
@@ -256,9 +408,14 @@ func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 }
 
 func (h *AuthHandler) GetCurrentUser(c *fiber.Ctx) error {
+	svc, err := h.getTenantService(c)
+	if err != nil {
+		return err
+	}
+
 	userID := middleware.GetUserID(c)
 
-	user, err := h.authService.GetUserByID(c.Context(), userID)
+	user, err := svc.GetUserByID(c.Context(), userID)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "User not found",
@@ -269,17 +426,22 @@ func (h *AuthHandler) GetCurrentUser(c *fiber.Ctx) error {
 }
 
 func (h *AuthHandler) RevokeAllSessions(c *fiber.Ctx) error {
+	svc, err := h.getTenantService(c)
+	if err != nil {
+		return err
+	}
+
 	userID := middleware.GetUserID(c)
 	username := middleware.GetUsername(c)
 
-	err := h.authService.RevokeAllSessions(c.Context(), userID)
+	err = svc.RevokeAllSessions(c.Context(), userID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to revoke sessions",
 		})
 	}
 
-	h.logAuditAction(c, security.ActionRevokeAllSessions, "auth", &userID, &username, security.AuditDetails(map[string]interface{}{
+	h.logAuditAction(c, svc.GetAuditService(), security.ActionRevokeAllSessions, "auth", &userID, &username, security.AuditDetails(map[string]interface{}{
 		"action": "All sessions revoked",
 	}))
 
@@ -299,6 +461,11 @@ func (h *AuthHandler) RevokeAllSessions(c *fiber.Ctx) error {
 }
 
 func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
+	svc, err := h.getTenantService(c)
+	if err != nil {
+		return err
+	}
+
 	userID := middleware.GetUserID(c)
 	username := middleware.GetUsername(c)
 
@@ -319,7 +486,7 @@ func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
 		})
 	}
 
-	err := h.authService.ChangePassword(c.Context(), userID, req.OldPassword, req.NewPassword)
+	err = svc.ChangePassword(c.Context(), userID, req.OldPassword, req.NewPassword)
 	if err != nil {
 		if err == services.ErrInvalidCredentials {
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
@@ -336,7 +503,7 @@ func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
 		})
 	}
 
-	h.logAuditAction(c, security.ActionPasswordChange, "auth", &userID, &username, "{}")
+	h.logAuditAction(c, svc.GetAuditService(), security.ActionPasswordChange, "auth", &userID, &username, "{}")
 
 	c.Cookie(&fiber.Cookie{
 		Name:     "auth_token",
@@ -354,6 +521,11 @@ func (h *AuthHandler) ChangePassword(c *fiber.Ctx) error {
 }
 
 func (h *AuthHandler) Toggle2FA(c *fiber.Ctx) error {
+	svc, err := h.getTenantService(c)
+	if err != nil {
+		return err
+	}
+
 	userID := middleware.GetUserID(c)
 	username := middleware.GetUsername(c)
 
@@ -367,14 +539,14 @@ func (h *AuthHandler) Toggle2FA(c *fiber.Ctx) error {
 		})
 	}
 
-	err := h.authService.Toggle2FA(c.Context(), userID, req.Enabled)
+	err = svc.Toggle2FA(c.Context(), userID, req.Enabled)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to update 2FA settings",
 		})
 	}
 
-	h.logAuditAction(c, security.ActionDataModified, "user", &userID, &username, security.AuditDetails(map[string]interface{}{
+	h.logAuditAction(c, svc.GetAuditService(), security.ActionDataModified, "user", &userID, &username, security.AuditDetails(map[string]interface{}{
 		"two_factor_enabled": req.Enabled,
 	}))
 
@@ -389,7 +561,7 @@ func (h *AuthHandler) Toggle2FA(c *fiber.Ctx) error {
 	})
 }
 
-func (h *AuthHandler) logAuditAction(c *fiber.Ctx, action security.AuditAction, resourceType string, resourceID *uuid.UUID, username *string, details string) {
+func (h *AuthHandler) logAuditAction(c *fiber.Ctx, auditService *security.AuditService, action security.AuditAction, resourceType string, resourceID *uuid.UUID, username *string, details string) {
 	entry := &security.AuditLog{
 		Action:       action,
 		UserID:       nil,
@@ -406,6 +578,6 @@ func (h *AuthHandler) logAuditAction(c *fiber.Ctx, action security.AuditAction, 
 	}
 
 	go func() {
-		_ = h.authService.GetAuditService().LogAction(c.Context(), entry)
+		_ = auditService.LogAction(c.Context(), entry)
 	}()
 }

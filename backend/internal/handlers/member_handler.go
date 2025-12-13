@@ -9,16 +9,30 @@ import (
 	"github.com/google/uuid"
 )
 
-type MemberHandler struct {
-	memberService *services.MemberService
-}
+// MemberHandler handles member-related requests
+// Multi-tenant: creates service per-request from context DB
+type MemberHandler struct{}
 
 func NewMemberHandler(memberService *services.MemberService) *MemberHandler {
-	return &MemberHandler{memberService: memberService}
+	return &MemberHandler{}
+}
+
+// getService creates a tenant-scoped MemberService from request context
+func (h *MemberHandler) getService(c *fiber.Ctx) *services.MemberService {
+	db := middleware.GetTenantDB(c)
+	if db == nil {
+		return nil
+	}
+	return services.NewMemberService(db)
 }
 
 func (h *MemberHandler) ListMembers(c *fiber.Ctx) error {
-	members, err := h.memberService.ListMembers(c.Context())
+	svc := h.getService(c)
+	if svc == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Database connection not found"})
+	}
+
+	members, err := svc.ListMembers(c.Context())
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch members"})
 	}
@@ -26,12 +40,17 @@ func (h *MemberHandler) ListMembers(c *fiber.Ctx) error {
 }
 
 func (h *MemberHandler) GetMember(c *fiber.Ctx) error {
+	svc := h.getService(c)
+	if svc == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Database connection not found"})
+	}
+
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid member ID"})
 	}
 
-	member, err := h.memberService.GetMemberByID(c.Context(), id)
+	member, err := svc.GetMemberByID(c.Context(), id)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Member not found"})
 	}
@@ -39,6 +58,11 @@ func (h *MemberHandler) GetMember(c *fiber.Ctx) error {
 }
 
 func (h *MemberHandler) CreateMember(c *fiber.Ctx) error {
+	svc := h.getService(c)
+	if svc == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Database connection not found"})
+	}
+
 	var req models.CreateMemberRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
@@ -49,7 +73,7 @@ func (h *MemberHandler) CreateMember(c *fiber.Ctx) error {
 	}
 
 	userID := middleware.GetUserID(c)
-	member, err := h.memberService.CreateMember(c.Context(), &req, userID)
+	member, err := svc.CreateMember(c.Context(), &req, userID)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -58,6 +82,11 @@ func (h *MemberHandler) CreateMember(c *fiber.Ctx) error {
 }
 
 func (h *MemberHandler) UpdateMember(c *fiber.Ctx) error {
+	svc := h.getService(c)
+	if svc == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Database connection not found"})
+	}
+
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid member ID"})
@@ -68,7 +97,7 @@ func (h *MemberHandler) UpdateMember(c *fiber.Ctx) error {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
 	}
 
-	member, err := h.memberService.UpdateMember(c.Context(), id, &req)
+	member, err := svc.UpdateMember(c.Context(), id, &req)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -77,12 +106,17 @@ func (h *MemberHandler) UpdateMember(c *fiber.Ctx) error {
 }
 
 func (h *MemberHandler) DeleteMember(c *fiber.Ctx) error {
+	svc := h.getService(c)
+	if svc == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Database connection not found"})
+	}
+
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid member ID"})
 	}
 
-	if err := h.memberService.DeleteMember(c.Context(), id); err != nil {
+	if err := svc.DeleteMember(c.Context(), id); err != nil {
 		if err == services.ErrMemberNotFound {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": "Member not found"})
 		}
@@ -94,6 +128,11 @@ func (h *MemberHandler) DeleteMember(c *fiber.Ctx) error {
 
 // RenewMembership processes a membership renewal/subscription payment
 func (h *MemberHandler) RenewMembership(c *fiber.Ctx) error {
+	svc := h.getService(c)
+	if svc == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Database connection not found"})
+	}
+
 	var req models.RenewMembershipRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
@@ -104,7 +143,7 @@ func (h *MemberHandler) RenewMembership(c *fiber.Ctx) error {
 	}
 
 	userID := middleware.GetUserID(c)
-	subscription, err := h.memberService.RenewMembership(c.Context(), &req, userID)
+	subscription, err := svc.RenewMembership(c.Context(), &req, userID)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
 	}
@@ -114,10 +153,15 @@ func (h *MemberHandler) RenewMembership(c *fiber.Ctx) error {
 
 // GetExpiringMembers returns members whose membership expires within 30 days
 func (h *MemberHandler) GetExpiringMembers(c *fiber.Ctx) error {
+	svc := h.getService(c)
+	if svc == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Database connection not found"})
+	}
+
 	// Default to 30 days threshold
 	daysThreshold := 30
 
-	members, err := h.memberService.GetExpiringMembers(c.Context(), daysThreshold)
+	members, err := svc.GetExpiringMembers(c.Context(), daysThreshold)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch expiring members"})
 	}
@@ -127,12 +171,17 @@ func (h *MemberHandler) GetExpiringMembers(c *fiber.Ctx) error {
 
 // GetSubscriptions returns subscription history for a member
 func (h *MemberHandler) GetSubscriptions(c *fiber.Ctx) error {
+	svc := h.getService(c)
+	if svc == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Database connection not found"})
+	}
+
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid member ID"})
 	}
 
-	subscriptions, err := h.memberService.GetMemberSubscriptions(c.Context(), id)
+	subscriptions, err := svc.GetMemberSubscriptions(c.Context(), id)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to fetch subscriptions"})
 	}

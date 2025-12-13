@@ -9,17 +9,31 @@ import (
 	"github.com/google/uuid"
 )
 
-type TransferHandler struct {
-	transferService *services.TransferService
-}
+// TransferHandler handles transfer-related requests
+// Multi-tenant: creates service per-request from context DB
+type TransferHandler struct{}
 
 func NewTransferHandler(transferService *services.TransferService) *TransferHandler {
-	return &TransferHandler{
-		transferService: transferService,
+	return &TransferHandler{}
+}
+
+// getService creates a tenant-scoped TransferService from request context
+func (h *TransferHandler) getService(c *fiber.Ctx) *services.TransferService {
+	db := middleware.GetTenantDB(c)
+	if db == nil {
+		return nil
 	}
+	return services.NewTransferService(db)
 }
 
 func (h *TransferHandler) CreateTransfer(c *fiber.Ctx) error {
+	svc := h.getService(c)
+	if svc == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Database connection not found",
+		})
+	}
+
 	var req models.CreateTransferRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -56,7 +70,7 @@ func (h *TransferHandler) CreateTransfer(c *fiber.Ctx) error {
 
 	userID := middleware.GetUserID(c)
 
-	response, err := h.transferService.CreateTransfer(c.Context(), &req, userID)
+	response, err := svc.CreateTransfer(c.Context(), &req, userID)
 	if err != nil {
 		if err == services.ErrInsufficientBalance {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{

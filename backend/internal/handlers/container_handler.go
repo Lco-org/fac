@@ -9,18 +9,34 @@ import (
 	"github.com/google/uuid"
 )
 
-type ContainerHandler struct {
-	containerService *services.ContainerService
-}
+// ContainerHandler handles container-related requests
+// Multi-tenant: creates service per-request from context DB
+type ContainerHandler struct{}
 
 func NewContainerHandler(containerService *services.ContainerService) *ContainerHandler {
-	return &ContainerHandler{
-		containerService: containerService,
+	// Note: containerService param is kept for backward compatibility but unused
+	// Handler now creates service per-request from tenant DB
+	return &ContainerHandler{}
+}
+
+// getService creates a tenant-scoped ContainerService from request context
+func (h *ContainerHandler) getService(c *fiber.Ctx) *services.ContainerService {
+	db := middleware.GetTenantDB(c)
+	if db == nil {
+		return nil
 	}
+	return services.NewContainerService(db)
 }
 
 func (h *ContainerHandler) ListContainers(c *fiber.Ctx) error {
-	containers, err := h.containerService.ListContainers(c.Context())
+	svc := h.getService(c)
+	if svc == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Database connection not found",
+		})
+	}
+
+	containers, err := svc.ListContainers(c.Context())
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to fetch containers",
@@ -31,6 +47,13 @@ func (h *ContainerHandler) ListContainers(c *fiber.Ctx) error {
 }
 
 func (h *ContainerHandler) GetContainer(c *fiber.Ctx) error {
+	svc := h.getService(c)
+	if svc == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Database connection not found",
+		})
+	}
+
 	idParam := c.Params("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
@@ -39,7 +62,7 @@ func (h *ContainerHandler) GetContainer(c *fiber.Ctx) error {
 		})
 	}
 
-	container, err := h.containerService.GetContainerByID(c.Context(), id)
+	container, err := svc.GetContainerByID(c.Context(), id)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "Container not found",
@@ -50,6 +73,13 @@ func (h *ContainerHandler) GetContainer(c *fiber.Ctx) error {
 }
 
 func (h *ContainerHandler) CreateContainer(c *fiber.Ctx) error {
+	svc := h.getService(c)
+	if svc == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Database connection not found",
+		})
+	}
+
 	var req models.FinancialContainer
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -65,7 +95,7 @@ func (h *ContainerHandler) CreateContainer(c *fiber.Ctx) error {
 
 	userID := middleware.GetUserID(c)
 
-	container, err := h.containerService.CreateContainer(c.Context(), &req, userID)
+	container, err := svc.CreateContainer(c.Context(), &req, userID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to create container",
@@ -76,6 +106,13 @@ func (h *ContainerHandler) CreateContainer(c *fiber.Ctx) error {
 }
 
 func (h *ContainerHandler) UpdateContainer(c *fiber.Ctx) error {
+	svc := h.getService(c)
+	if svc == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Database connection not found",
+		})
+	}
+
 	idParam := c.Params("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
@@ -91,7 +128,7 @@ func (h *ContainerHandler) UpdateContainer(c *fiber.Ctx) error {
 		})
 	}
 
-	container, err := h.containerService.UpdateContainer(c.Context(), id, &req)
+	container, err := svc.UpdateContainer(c.Context(), id, &req)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to update container",
@@ -102,6 +139,13 @@ func (h *ContainerHandler) UpdateContainer(c *fiber.Ctx) error {
 }
 
 func (h *ContainerHandler) DeleteContainer(c *fiber.Ctx) error {
+	svc := h.getService(c)
+	if svc == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Database connection not found",
+		})
+	}
+
 	idParam := c.Params("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
@@ -110,7 +154,7 @@ func (h *ContainerHandler) DeleteContainer(c *fiber.Ctx) error {
 		})
 	}
 
-	if err := h.containerService.DeleteContainer(c.Context(), id); err != nil {
+	if err := svc.DeleteContainer(c.Context(), id); err != nil {
 		if err == services.ErrContainerNotFound {
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 				"error": "Container not found",

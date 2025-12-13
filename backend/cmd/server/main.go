@@ -6,6 +6,7 @@ import (
 	"cso-erp/internal/handlers"
 	"cso-erp/internal/middleware"
 	"cso-erp/internal/models"
+	"cso-erp/internal/security"
 	"cso-erp/internal/services"
 	"log"
 	"os"
@@ -27,6 +28,26 @@ func main() {
 	}
 	defer db.Close()
 
+	// Connect to Master Database for SSA operations
+	masterDBConfig := &config.DatabaseConfig{
+		Host:     cfg.Database.Host,
+		Port:     cfg.Database.Port,
+		User:     cfg.Database.User,
+		Password: cfg.Database.Password,
+		DBName:   cfg.MultiTenant.MasterDBName, // erp_master
+		SSLMode:  cfg.Database.SSLMode,
+	}
+
+	masterDB, err := database.Connect(masterDBConfig)
+	if err != nil {
+		log.Printf("⚠️ Failed to connect to master database (%s): %v", cfg.MultiTenant.MasterDBName, err)
+		log.Println("SSA features will be disabled")
+		masterDB = db // Fallback to main DB for development
+	} else {
+		log.Printf("✅ Master database connected: %s", cfg.MultiTenant.MasterDBName)
+		defer masterDB.Close()
+	}
+
 	var emailConfig *services.EmailConfig
 	if cfg.Email.SMTPHost != "" {
 		emailConfig = &services.EmailConfig{
@@ -47,8 +68,12 @@ func main() {
 	otpCleanupService.StartCleanupScheduler()
 	defer otpCleanupService.StopCleanupScheduler()
 
-	authService := services.NewAuthService(db, cfg, emailService)
+	// authService is now created per-request in AuthHandler
+	// authService := services.NewAuthService(db, cfg, emailService)
+
+	// Keep userService for EmailHandler (until EmailHandler is refactored)
 	userService := services.NewUserService(db, cfg)
+
 	containerService := services.NewContainerService(db)
 	transactionService := services.NewTransactionService(db)
 	reportService := services.NewReportService(db)
@@ -60,8 +85,10 @@ func main() {
 	receiptService := services.NewReceiptService(db)
 	hrService := services.NewHRService(db)
 
-	authHandler := handlers.NewAuthHandler(authService, cfg)
-	userHandler := handlers.NewUserHandler(userService, emailService)
+	authHandler := handlers.NewAuthHandler(masterDB, cfg, emailService)
+	userHandler := handlers.NewUserHandler(cfg, emailService)
+	emailTemplateHandler := handlers.NewEmailTemplateHandler(cfg)
+
 	containerHandler := handlers.NewContainerHandler(containerService)
 	transactionHandler := handlers.NewTransactionHandler(transactionService)
 	reportHandler := handlers.NewReportHandler(reportService)
@@ -89,6 +116,11 @@ func main() {
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
 		AllowMethods:     "GET, POST, PUT, DELETE, OPTIONS, PATCH",
 	}))
+
+	// Tenant Resolver - Identifies tenant and injects DB
+	// Uses masterDB because organizations table is in erp_master
+	tenantResolver := middleware.NewTenantResolver(cfg, masterDB.DB)
+	app.Use(tenantResolver.ResolveTenant())
 
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{
@@ -123,6 +155,21 @@ func main() {
 	adminUsers.Put("/:id", userHandler.UpdateUser)
 	adminUsers.Delete("/:id", userHandler.DeleteUser)
 	adminUsers.Patch("/:id/role", userHandler.UpdateUserRole)
+
+	// Organization Email Templates & SMTP Settings
+	org := protected.Group("/organization", middleware.RequireRole(models.RoleAdmin))
+	org.Get("/email-templates", emailTemplateHandler.ListTemplates)
+	org.Get("/email-templates/:id", emailTemplateHandler.GetTemplate)
+	org.Put("/email-templates/:id", emailTemplateHandler.UpdateTemplate)
+	org.Post("/email-templates/preview", emailTemplateHandler.PreviewTemplate)
+	org.Post("/email-templates/:key/reset", emailTemplateHandler.ResetTemplate)
+
+	org.Get("/smtp-settings", emailTemplateHandler.ListSMTPSettings)
+	org.Post("/smtp-settings", emailTemplateHandler.CreateSMTPSettings)
+	org.Get("/smtp-settings/:id", emailTemplateHandler.GetSMTPSettings)
+	org.Put("/smtp-settings/:id", emailTemplateHandler.UpdateSMTPSettings)
+	org.Delete("/smtp-settings/:id", emailTemplateHandler.DeleteSMTPSettings)
+	org.Post("/smtp-settings/:id/test", emailTemplateHandler.TestSMTPSettings)
 
 	dashboardWidgets := protected.Group("/admin/dashboard-widgets", middleware.RequireRole(models.RoleAdmin))
 	dashboardWidgets.Get("", dashboardHandler.GetWidgetConfigs)
@@ -192,6 +239,106 @@ func main() {
 	// Email routes (Admin only)
 	email := protected.Group("/email", middleware.RequireRole(models.RoleAdmin))
 	email.Post("/bulk", emailHandler.SendBulkEmail)
+
+	// ==========================================================================
+	// SUPER SYSTEM ADMIN (SSA) ROUTES - Multi-Tenant Management
+	// ==========================================================================
+	// Note: These routes require RoleSystemAdmin and additional SSA middleware
+	// The SSA middleware includes: IP restriction, rate limiting, and 2FA check
+
+	// Initialize Tenant Service and Handler for SSA operations (using MASTER DB)
+	tenantService := services.NewTenantService(masterDB, cfg)
+	tenantHandler := handlers.NewTenantHandler(tenantService, emailService, cfg)
+
+	// Initialize SSA Auth Service and Handler (using MASTER DB)
+	ssaAuthService := services.NewSSAAuthService(masterDB, cfg, emailService)
+	ssaAuthHandler := handlers.NewSSAAuthHandler(ssaAuthService, cfg)
+
+	// SSA Auth Routes - No auth middleware (these are for initial login)
+	// Registered directly on app to avoid ANY middleware from api group
+	ssaAuth := app.Group("/api/v1/system-auth")
+	ssaAuth.Post("/login", ssaAuthHandler.Login)
+	ssaAuth.Post("/verify-2fa", ssaAuthHandler.Verify2FA)
+	ssaAuth.Post("/logout", ssaAuthHandler.Logout)
+
+	// TEMPORARY: Direct SSA registration (remove in production!)
+	ssaAuth.Post("/temp-register", func(c *fiber.Ctx) error {
+		var req struct {
+			Username string `json:"username"`
+			Password string `json:"password"`
+			Email    string `json:"email"`
+			FullName string `json:"full_name"`
+		}
+
+		if err := c.BodyParser(&req); err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request"})
+		}
+
+		if req.Username == "" || req.Password == "" || req.Email == "" {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "All fields required"})
+		}
+
+		// Hash password
+		hash, err := security.HashPassword(req.Password, nil)
+		if err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": "Failed to hash password"})
+		}
+
+		// Insert into master database
+		query := `
+			INSERT INTO super_system_admins (id, username, email, password_hash, full_name, is_active, two_factor_enabled)
+			VALUES (gen_random_uuid(), $1, $2, $3, $4, true, false)
+			ON CONFLICT (username) DO UPDATE SET password_hash = $3
+			RETURNING id
+		`
+		var id string
+		err = masterDB.QueryRowContext(c.Context(), query, req.Username, req.Email, hash, req.FullName).Scan(&id)
+		if err != nil {
+			log.Printf("SSA Registration error: %v", err)
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+		}
+
+		return c.JSON(fiber.Map{
+			"success":  true,
+			"message":  "تم إنشاء/تحديث حساب SSA بنجاح",
+			"id":       id,
+			"username": req.Username,
+			"email":    req.Email,
+		})
+	})
+
+	log.Println("⚠️ TEMPORARY SSA Registration endpoint enabled at /api/v1/system-auth/temp-register")
+
+	// SSA API Routes - Protected by Super Admin middleware
+	ssa := api.Group("/ssa",
+		middleware.AuthMiddleware(&cfg.JWT),
+		middleware.RequireSuperAdmin(cfg),
+	)
+
+	// SSA Profile
+	ssa.Get("/me", ssaAuthHandler.GetMe)
+
+	// Organization Management
+	ssa.Get("/stats", tenantHandler.GetOrganizationStats)
+	ssa.Get("/organizations", tenantHandler.ListOrganizations)
+	ssa.Post("/organizations", tenantHandler.CreateOrganization)
+	ssa.Get("/organizations/:id", tenantHandler.GetOrganization)
+
+	// Domain Verification
+	ssa.Post("/organizations/:id/verify", tenantHandler.VerifyDomain)
+	ssa.Post("/organizations/:id/resend-verification", tenantHandler.ResendVerification)
+
+	// Database Creation
+	ssa.Post("/organizations/:id/database", tenantHandler.CreateDatabase)
+
+	// Tenant Admin Management
+	ssa.Post("/organizations/:id/admin", tenantHandler.CreateTenantAdmin)
+
+	// Organization Status Management
+	ssa.Post("/organizations/:id/suspend", tenantHandler.SuspendOrganization)
+	ssa.Post("/organizations/:id/activate", tenantHandler.ActivateOrganization)
+
+	log.Printf("🔐 SSA Routes configured at /api/v1/ssa/*")
 
 	port := cfg.App.Port
 	log.Printf("🚀 Server starting on port %s", port)

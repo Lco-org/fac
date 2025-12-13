@@ -9,10 +9,11 @@ import (
 type UserRole string
 
 const (
-	RoleAdmin   UserRole = "admin"
-	RoleFinance UserRole = "finance"
-	RoleAuditor UserRole = "auditor"
-	RoleHR      UserRole = "hr"
+	RoleAdmin       UserRole = "admin"
+	RoleFinance     UserRole = "finance"
+	RoleAuditor     UserRole = "auditor"
+	RoleHR          UserRole = "hr"
+	RoleSystemAdmin UserRole = "system_admin" // Super System Admin - hidden role
 )
 
 type User struct {
@@ -669,4 +670,333 @@ type ExpiringMember struct {
 	Phone            *string   `json:"phone,omitempty"`
 	ValidUntil       time.Time `json:"valid_until"`
 	DaysRemaining    int       `json:"days_remaining"`
+}
+
+// ============================================================================
+// MULTI-TENANT MODELS (Super System Admin - SSA)
+// ============================================================================
+
+// OrganizationStatus represents the status of an organization
+type OrganizationStatus string
+
+const (
+	OrgStatusPendingVerification OrganizationStatus = "pending_verification"
+	OrgStatusActive              OrganizationStatus = "active"
+	OrgStatusSuspended           OrganizationStatus = "suspended"
+	OrgStatusDeleted             OrganizationStatus = "deleted"
+)
+
+// Organization represents a tenant in the multi-tenant system
+type Organization struct {
+	ID                  uuid.UUID          `json:"id"`
+	Name                string             `json:"name"`
+	NameAr              *string            `json:"name_ar,omitempty"`
+	Slug                string             `json:"slug"`
+	PrimaryDomain       string             `json:"primary_domain"`
+	DatabaseName        string             `json:"database_name"`
+	ContactEmail        string             `json:"contact_email"`
+	ContactPhone        *string            `json:"contact_phone,omitempty"`
+	Status              OrganizationStatus `json:"status"`
+	SubscriptionPlanID  *uuid.UUID         `json:"subscription_plan_id,omitempty"`
+	SubscriptionStatus  string             `json:"subscription_status"`
+	SubscriptionExpires *time.Time         `json:"subscription_expires_at,omitempty"`
+	LogoURL             *string            `json:"logo_url,omitempty"`
+	Settings            map[string]any     `json:"settings,omitempty"`
+	CreatedAt           time.Time          `json:"created_at"`
+	UpdatedAt           time.Time          `json:"updated_at"`
+	VerifiedAt          *time.Time         `json:"verified_at,omitempty"`
+	SuspendedAt         *time.Time         `json:"suspended_at,omitempty"`
+	CreatedBy           uuid.UUID          `json:"created_by"`
+}
+
+// AllowedDomain represents a domain allowed for an organization
+type AllowedDomain struct {
+	ID                 uuid.UUID  `json:"id"`
+	OrganizationID     uuid.UUID  `json:"organization_id"`
+	Domain             string     `json:"domain"`
+	IsPrimary          bool       `json:"is_primary"`
+	IsActive           bool       `json:"is_active"`
+	Verified           bool       `json:"verified"`
+	VerifiedAt         *time.Time `json:"verified_at,omitempty"`
+	VerificationMethod *string    `json:"verification_method,omitempty"`
+	CreatedAt          time.Time  `json:"created_at"`
+}
+
+// DomainVerification represents a pending domain verification
+type DomainVerification struct {
+	ID             uuid.UUID  `json:"id"`
+	OrganizationID uuid.UUID  `json:"organization_id"`
+	Email          string     `json:"email"`
+	HashCode       string     `json:"-"` // Never expose
+	ExpiresAt      time.Time  `json:"expires_at"`
+	Verified       bool       `json:"verified"`
+	VerifiedAt     *time.Time `json:"verified_at,omitempty"`
+	Attempts       int        `json:"attempts"`
+	MaxAttempts    int        `json:"max_attempts"`
+	RequestIP      *string    `json:"request_ip,omitempty"`
+	VerifyIP       *string    `json:"verify_ip,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+}
+
+// SuperSystemAdmin represents a super system admin user
+type SuperSystemAdmin struct {
+	ID                  uuid.UUID  `json:"id"`
+	Username            string     `json:"username"`
+	Email               string     `json:"email"`
+	PasswordHash        string     `json:"-"`
+	FullName            string     `json:"full_name"`
+	TwoFactorEnabled    bool       `json:"two_factor_enabled"`
+	TwoFactorSecret     *string    `json:"-"`
+	TokenVersion        int        `json:"-"`
+	LastLogin           *time.Time `json:"last_login,omitempty"`
+	LastLoginIP         *string    `json:"last_login_ip,omitempty"`
+	FailedLoginAttempts int        `json:"-"`
+	LockedUntil         *time.Time `json:"-"`
+	IsActive            bool       `json:"is_active"`
+	CreatedAt           time.Time  `json:"created_at"`
+	UpdatedAt           time.Time  `json:"updated_at"`
+}
+
+// SubscriptionPlan represents a subscription plan for organizations
+type SubscriptionPlan struct {
+	ID            uuid.UUID `json:"id"`
+	Name          string    `json:"name"`
+	NameAr        *string   `json:"name_ar,omitempty"`
+	Code          string    `json:"code"`
+	PriceMonthly  float64   `json:"price_monthly"`
+	PriceYearly   float64   `json:"price_yearly"`
+	Currency      string    `json:"currency"`
+	MaxUsers      int       `json:"max_users"`
+	MaxStorageGB  int       `json:"max_storage_gb"`
+	Features      []string  `json:"features"`
+	IsActive      bool      `json:"is_active"`
+	IsDefault     bool      `json:"is_default"`
+	SortOrder     int       `json:"sort_order"`
+	Description   *string   `json:"description,omitempty"`
+	DescriptionAr *string   `json:"description_ar,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
+}
+
+// SuperAdminAudit represents an audit log entry for SSA actions
+type SuperAdminAudit struct {
+	ID           uuid.UUID      `json:"id"`
+	AdminID      uuid.UUID      `json:"admin_id"`
+	AdminEmail   string         `json:"admin_email"`
+	Action       string         `json:"action"`
+	ResourceType string         `json:"resource_type"`
+	ResourceID   *uuid.UUID     `json:"resource_id,omitempty"`
+	OldValues    map[string]any `json:"old_values,omitempty"`
+	NewValues    map[string]any `json:"new_values,omitempty"`
+	IPAddress    string         `json:"ip_address"`
+	UserAgent    *string        `json:"user_agent,omitempty"`
+	RequestID    *string        `json:"request_id,omitempty"`
+	PreviousHash *string        `json:"previous_hash,omitempty"`
+	CurrentHash  *string        `json:"current_hash,omitempty"`
+	CreatedAt    time.Time      `json:"created_at"`
+}
+
+// ============================================================================
+// MULTI-TENANT REQUEST/RESPONSE STRUCTS
+// ============================================================================
+
+// CreateOrganizationRequest for creating a new organization
+type CreateOrganizationRequest struct {
+	Name         string  `json:"name" validate:"required,min=2,max=255"`
+	NameAr       *string `json:"name_ar,omitempty"`
+	Domain       string  `json:"domain" validate:"required,fqdn"`
+	ContactEmail string  `json:"contact_email" validate:"required,email"`
+	ContactPhone *string `json:"contact_phone,omitempty"`
+}
+
+// VerifyDomainRequest for verifying domain ownership
+type VerifyDomainRequest struct {
+	OrganizationID uuid.UUID `json:"organization_id" validate:"required"`
+	Code           string    `json:"code" validate:"required,len=6"`
+}
+
+// CreateTenantAdminRequest for creating first admin of organization
+type CreateTenantAdminRequest struct {
+	Username   string  `json:"username" validate:"required,min=3,max=50"`
+	Email      string  `json:"email" validate:"required,email"`
+	FullName   string  `json:"full_name" validate:"required,min=2,max=255"`
+	FullNameAr *string `json:"full_name_ar,omitempty"`
+}
+
+// CreateTenantAdminResponse returned after creating tenant admin
+type CreateTenantAdminResponse struct {
+	Username          string `json:"username"`
+	Email             string `json:"email"`
+	TemporaryPassword string `json:"temporary_password"`
+	OrganizationName  string `json:"organization_name"`
+	LoginURL          string `json:"login_url"`
+}
+
+// ResendVerificationRequest for resending verification email
+type ResendVerificationRequest struct {
+	OrganizationID uuid.UUID `json:"organization_id" validate:"required"`
+	Email          string    `json:"email" validate:"required,email"`
+}
+
+// SuspendOrganizationRequest for suspending an organization
+type SuspendOrganizationRequest struct {
+	Reason   string  `json:"reason" validate:"required"`
+	ReasonAr *string `json:"reason_ar,omitempty"`
+}
+
+// OrganizationListItem for listing organizations
+type OrganizationListItem struct {
+	ID            uuid.UUID          `json:"id"`
+	Name          string             `json:"name"`
+	NameAr        *string            `json:"name_ar,omitempty"`
+	PrimaryDomain string             `json:"primary_domain"`
+	Status        OrganizationStatus `json:"status"`
+	UserCount     int                `json:"user_count"`
+	LastActivity  *time.Time         `json:"last_activity,omitempty"`
+	CreatedAt     time.Time          `json:"created_at"`
+}
+
+// OrganizationStats for SSA dashboard
+type OrganizationStats struct {
+	TotalOrganizations     int     `json:"total_organizations"`
+	ActiveOrganizations    int     `json:"active_organizations"`
+	PendingVerification    int     `json:"pending_verification"`
+	SuspendedOrganizations int     `json:"suspended_organizations"`
+	TotalUsers             int     `json:"total_users"`
+	TotalStorageUsedGB     float64 `json:"total_storage_used_gb"`
+}
+
+// SSALoginRequest for super system admin login
+type SSALoginRequest struct {
+	Username string `json:"username" validate:"required"`
+	Password string `json:"password" validate:"required"`
+}
+
+// SSALoginResponse for super system admin login response
+type SSALoginResponse struct {
+	Admin            SuperSystemAdmin `json:"admin"`
+	Token            string           `json:"token"`
+	Requires2FA      bool             `json:"requires_2fa"`
+	PendingSessionID *string          `json:"pending_session_id,omitempty"`
+}
+
+// SSAVerify2FARequest for 2FA verification
+type SSAVerify2FARequest struct {
+	SessionID string `json:"session_id" validate:"required"`
+	Code      string `json:"code" validate:"required,len=6"`
+}
+
+// ============================================================================
+// ORGANIZATION-SPECIFIC MODELS (Tenant Database)
+// ============================================================================
+
+// EmailTemplate for customizable email templates per organization
+type EmailTemplate struct {
+	ID          uuid.UUID  `json:"id"`
+	TemplateKey string     `json:"template_key"`
+	Name        string     `json:"name"`
+	NameAr      *string    `json:"name_ar,omitempty"`
+	Subject     string     `json:"subject"`
+	SubjectAr   *string    `json:"subject_ar,omitempty"`
+	BodyHTML    string     `json:"body_html"`
+	BodyText    *string    `json:"body_text,omitempty"`
+	Description *string    `json:"description,omitempty"`
+	Variables   []string   `json:"variables"`
+	IsActive    bool       `json:"is_active"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
+	CreatedBy   *uuid.UUID `json:"created_by,omitempty"`
+}
+
+// SMTPSettings for organization-specific SMTP configuration
+type SMTPSettings struct {
+	ID                uuid.UUID  `json:"id"`
+	Name              string     `json:"name"`
+	SMTPHost          string     `json:"smtp_host"`
+	SMTPPort          int        `json:"smtp_port"`
+	Username          string     `json:"username,omitempty"`
+	PasswordEncrypted string     `json:"-"`
+	FromAddress       string     `json:"from_address"`
+	FromName          *string    `json:"from_name,omitempty"`
+	UseTLS            bool       `json:"use_tls"`
+	IsActive          bool       `json:"is_active"`
+	IsDefault         bool       `json:"is_default"`
+	TestEmailSentAt   *time.Time `json:"test_email_sent_at,omitempty"`
+	LastError         *string    `json:"last_error,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
+	CreatedBy         *uuid.UUID `json:"created_by,omitempty"`
+}
+
+// OrganizationSettings key-value store for tenant-specific settings
+type OrganizationSettings struct {
+	ID           uuid.UUID `json:"id"`
+	SettingKey   string    `json:"setting_key"`
+	SettingValue *string   `json:"setting_value,omitempty"`
+	SettingType  string    `json:"setting_type"`
+	Description  *string   `json:"description,omitempty"`
+	IsEncrypted  bool      `json:"is_encrypted"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+// ============================================================================
+// EMAIL TEMPLATE REQUEST/RESPONSE STRUCTS
+// ============================================================================
+
+// UpdateEmailTemplateRequest for updating email template
+type UpdateEmailTemplateRequest struct {
+	Name        *string  `json:"name,omitempty"`
+	NameAr      *string  `json:"name_ar,omitempty"`
+	Subject     *string  `json:"subject,omitempty"`
+	SubjectAr   *string  `json:"subject_ar,omitempty"`
+	BodyHTML    *string  `json:"body_html,omitempty"`
+	BodyText    *string  `json:"body_text,omitempty"`
+	Description *string  `json:"description,omitempty"`
+	Variables   []string `json:"variables,omitempty"`
+	IsActive    *bool    `json:"is_active,omitempty"`
+}
+
+// CreateSMTPSettingsRequest for creating SMTP settings
+type CreateSMTPSettingsRequest struct {
+	Name        string  `json:"name" validate:"required"`
+	SMTPHost    string  `json:"smtp_host" validate:"required"`
+	SMTPPort    int     `json:"smtp_port" validate:"required,min=1,max=65535"`
+	Username    string  `json:"username"`
+	Password    string  `json:"password"`
+	FromAddress string  `json:"from_address" validate:"required,email"`
+	FromName    *string `json:"from_name,omitempty"`
+	UseTLS      bool    `json:"use_tls"`
+	IsDefault   bool    `json:"is_default"`
+}
+
+// UpdateSMTPSettingsRequest for updating SMTP settings
+type UpdateSMTPSettingsRequest struct {
+	Name        *string `json:"name,omitempty"`
+	SMTPHost    *string `json:"smtp_host,omitempty"`
+	SMTPPort    *int    `json:"smtp_port,omitempty"`
+	Username    *string `json:"username,omitempty"`
+	Password    *string `json:"password,omitempty"`
+	FromAddress *string `json:"from_address,omitempty"`
+	FromName    *string `json:"from_name,omitempty"`
+	UseTLS      *bool   `json:"use_tls,omitempty"`
+	IsDefault   *bool   `json:"is_default,omitempty"`
+	IsActive    *bool   `json:"is_active,omitempty"`
+}
+
+// TestSMTPRequest for testing SMTP connection
+type TestSMTPRequest struct {
+	ToEmail string `json:"to_email" validate:"required,email"`
+}
+
+// TemplatePreviewRequest for previewing email template with variables
+type TemplatePreviewRequest struct {
+	TemplateKey string            `json:"template_key" validate:"required"`
+	Variables   map[string]string `json:"variables"`
+}
+
+// TemplatePreviewResponse for template preview response
+type TemplatePreviewResponse struct {
+	Subject string `json:"subject"`
+	Body    string `json:"body"`
 }

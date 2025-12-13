@@ -9,17 +9,31 @@ import (
 	"github.com/google/uuid"
 )
 
-type TransactionHandler struct {
-	transactionService *services.TransactionService
-}
+// TransactionHandler handles transaction-related requests
+// Multi-tenant: creates service per-request from context DB
+type TransactionHandler struct{}
 
 func NewTransactionHandler(transactionService *services.TransactionService) *TransactionHandler {
-	return &TransactionHandler{
-		transactionService: transactionService,
+	return &TransactionHandler{}
+}
+
+// getService creates a tenant-scoped TransactionService from request context
+func (h *TransactionHandler) getService(c *fiber.Ctx) *services.TransactionService {
+	db := middleware.GetTenantDB(c)
+	if db == nil {
+		return nil
 	}
+	return services.NewTransactionService(db)
 }
 
 func (h *TransactionHandler) CreateTransaction(c *fiber.Ctx) error {
+	svc := h.getService(c)
+	if svc == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Database connection not found",
+		})
+	}
+
 	var req models.CreateTransactionRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -55,7 +69,7 @@ func (h *TransactionHandler) CreateTransaction(c *fiber.Ctx) error {
 
 	userID := middleware.GetUserID(c)
 
-	response, err := h.transactionService.CreateTransaction(c.Context(), &req, userID)
+	response, err := svc.CreateTransaction(c.Context(), &req, userID)
 	if err != nil {
 		if err == services.ErrInsufficientBalance {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
@@ -85,6 +99,13 @@ func (h *TransactionHandler) CreateTransaction(c *fiber.Ctx) error {
 }
 
 func (h *TransactionHandler) GetTransaction(c *fiber.Ctx) error {
+	svc := h.getService(c)
+	if svc == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Database connection not found",
+		})
+	}
+
 	idParam := c.Params("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
@@ -93,7 +114,7 @@ func (h *TransactionHandler) GetTransaction(c *fiber.Ctx) error {
 		})
 	}
 
-	transaction, err := h.transactionService.GetTransactionByID(c.Context(), id)
+	transaction, err := svc.GetTransactionByID(c.Context(), id)
 	if err != nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
 			"error": "Transaction not found",
@@ -104,6 +125,13 @@ func (h *TransactionHandler) GetTransaction(c *fiber.Ctx) error {
 }
 
 func (h *TransactionHandler) ReverseTransaction(c *fiber.Ctx) error {
+	svc := h.getService(c)
+	if svc == nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "Database connection not found",
+		})
+	}
+
 	idParam := c.Params("id")
 	id, err := uuid.Parse(idParam)
 	if err != nil {
@@ -123,7 +151,7 @@ func (h *TransactionHandler) ReverseTransaction(c *fiber.Ctx) error {
 
 	userID := middleware.GetUserID(c)
 
-	err = h.transactionService.ReverseTransaction(c.Context(), id, req.Reason, userID)
+	err = svc.ReverseTransaction(c.Context(), id, req.Reason, userID)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"error": "Failed to reverse transaction",
