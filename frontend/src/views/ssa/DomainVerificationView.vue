@@ -48,6 +48,10 @@ const fetchOrganization = async () => {
     })
     if (response.ok) {
       organization.value = await response.json()
+      // Use contact_email if email param was missing
+      if (!email.value && organization.value.contact_email) {
+        email.value = organization.value.contact_email
+      }
     }
   } catch (err) {
     console.error('Failed to fetch organization:', err)
@@ -143,9 +147,20 @@ const handleCodeInput = (event) => {
   }
 }
 
-onMounted(() => {
-  fetchOrganization()
-  startTimer()
+onMounted(async () => {
+  await fetchOrganization()
+  
+  // Auto-send verification code on page load
+  // This ensures the user always gets a fresh code when visiting this page
+  if (organization.value && !success.value) {
+    // Set email from organization if not in query params
+    if (!email.value && organization.value.contact_email) {
+      email.value = organization.value.contact_email
+    }
+    
+    // Automatically send verification code
+    await resendCode()
+  }
 })
 </script>
 

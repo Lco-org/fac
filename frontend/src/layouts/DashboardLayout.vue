@@ -40,6 +40,8 @@ const menuItems = computed(() => {
         { title: 'الأعضاء المنتسبين', path: '/admin/members', icon: '👥' },
         { title: 'إعدادات', path: '/admin/dashboard-config', icon: '⚙️' },
         { title: 'المراسلات', path: '/admin/messaging', icon: '📧' },
+        { title: 'قوالب البريد', path: '/admin/email-templates', icon: '📝' },
+        { title: 'إعدادات SMTP', path: '/admin/smtp-settings', icon: '📮' },
       ],
     },
     {

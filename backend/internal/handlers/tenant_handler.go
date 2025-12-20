@@ -71,12 +71,19 @@ func (h *TenantHandler) CreateOrganization(c *fiber.Ctx) error {
 		})
 	}
 
-	// Send verification email
+	// Send verification email using master SMTP (from .env)
 	if h.emailService != nil {
+		// Log SSA email attempt
+		if cfg := h.emailService.GetConfig(); cfg != nil {
+			log.Printf("[SSA EMAIL] Sending verification to %s via %s (from: %s)", req.ContactEmail, cfg.SMTPHost, cfg.FromAddress)
+		}
+
 		err = h.emailService.SendVerificationCode(req.ContactEmail, org.Name, code)
 		if err != nil {
 			// Log error but don't fail - code was generated
-			log.Printf("Failed to send verification email: %v", err)
+			log.Printf("[SSA EMAIL ERROR] Failed to send verification email: %v", err)
+		} else {
+			log.Printf("[SSA EMAIL SUCCESS] Verification code sent to %s", req.ContactEmail)
 		}
 	}
 
@@ -345,14 +352,26 @@ func (h *TenantHandler) ResendVerification(c *fiber.Ctx) error {
 		})
 	}
 
-	// Send verification email
+	// Send verification email using master SMTP (from .env)
 	if h.emailService != nil {
 		org, _ := h.tenantService.GetOrganizationByID(c.Context(), orgID)
 		orgName := "Organization"
 		if org != nil {
 			orgName = org.Name
 		}
-		_ = h.emailService.SendVerificationCode(req.Email, orgName, code)
+
+		// Log SSA email attempt
+		if cfg := h.emailService.GetConfig(); cfg != nil {
+			log.Printf("[SSA EMAIL] Sending verification to %s via %s (from: %s)", req.Email, cfg.SMTPHost, cfg.FromAddress)
+		}
+
+		if err := h.emailService.SendVerificationCode(req.Email, orgName, code); err != nil {
+			log.Printf("[SSA EMAIL ERROR] Failed to send verification email: %v", err)
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to send email: " + err.Error(),
+			})
+		}
+		log.Printf("[SSA EMAIL SUCCESS] Verification code sent to %s", req.Email)
 	}
 
 	return c.JSON(fiber.Map{

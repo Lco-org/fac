@@ -608,25 +608,69 @@ func (s *EmailService) SendEmail(ctx context.Context, to, subject, body string, 
 	message.WriteString(body)
 
 	addr := fmt.Sprintf("%s:%s", s.config.SMTPHost, s.config.SMTPPort)
+	log.Printf("[SMTP DEBUG] Connecting to %s...", addr)
 
-	dialer := &net.Dialer{Timeout: SMTPDialTimeout}
-	conn, err := dialer.DialContext(ctx, "tcp", addr)
-	if err != nil {
-		return err
-	}
+	var conn net.Conn
+	var client *smtp.Client
 
-	client, err := smtp.NewClient(conn, s.config.SMTPHost)
-	if err != nil {
-		conn.Close()
-		return err
+	// Port 465 uses Implicit TLS (direct SSL connection)
+	// Port 587 uses STARTTLS (upgrade after connect)
+	if s.config.SMTPPort == "465" && s.config.UseTLS {
+		log.Printf("[SMTP DEBUG] Using Implicit TLS (Port 465)...")
+		tlsConfig := &tls.Config{
+			ServerName:         s.config.SMTPHost,
+			InsecureSkipVerify: s.config.SkipVerify,
+			MinVersion:         MinTLSVersion,
+		}
+		dialer := &tls.Dialer{
+			NetDialer: &net.Dialer{Timeout: SMTPDialTimeout},
+			Config:    tlsConfig,
+		}
+		var err error
+		conn, err = dialer.DialContext(ctx, "tcp", addr)
+		if err != nil {
+			log.Printf("[SMTP ERROR] TLS Connection failed: %v", err)
+			return err
+		}
+		log.Printf("[SMTP DEBUG] TLS Connected successfully")
+
+		client, err = smtp.NewClient(conn, s.config.SMTPHost)
+		if err != nil {
+			conn.Close()
+			log.Printf("[SMTP ERROR] Client creation failed: %v", err)
+			return err
+		}
+	} else {
+		// Standard connection for port 587 with STARTTLS
+		dialer := &net.Dialer{Timeout: SMTPDialTimeout}
+		var err error
+		conn, err = dialer.DialContext(ctx, "tcp", addr)
+		if err != nil {
+			log.Printf("[SMTP ERROR] Connection failed: %v", err)
+			return err
+		}
+		log.Printf("[SMTP DEBUG] Connected successfully")
+
+		client, err = smtp.NewClient(conn, s.config.SMTPHost)
+		if err != nil {
+			conn.Close()
+			log.Printf("[SMTP ERROR] Client creation failed: %v", err)
+			return err
+		}
 	}
 	defer client.Close()
 
+	var err error
 	if err = client.Hello("lco.org.ly"); err != nil {
+		log.Printf("[SMTP ERROR] HELLO failed: %v", err)
 		return err
 	}
+	log.Printf("[SMTP DEBUG] HELLO OK")
 
-	if s.config.UseTLS {
+	// Skip STARTTLS for port 465 (already using implicit TLS)
+	// Only use STARTTLS for port 587 or other non-SSL ports
+	if s.config.UseTLS && s.config.SMTPPort != "465" {
+		log.Printf("[SMTP DEBUG] Starting TLS (STARTTLS)...")
 		tlsConfig := &tls.Config{
 			ServerName:         s.config.SMTPHost,
 			InsecureSkipVerify: s.config.SkipVerify,
@@ -639,42 +683,59 @@ func (s *EmailService) SendEmail(ctx context.Context, to, subject, body string, 
 			},
 		}
 		if err = client.StartTLS(tlsConfig); err != nil {
+			log.Printf("[SMTP ERROR] STARTTLS failed: %v", err)
 			return err
 		}
+		log.Printf("[SMTP DEBUG] TLS OK")
+	} else if s.config.SMTPPort == "465" {
+		log.Printf("[SMTP DEBUG] Using Implicit TLS (Port 465) - STARTTLS skipped")
 	}
 
 	if s.config.Username != "" {
+		log.Printf("[SMTP DEBUG] Authenticating as %s...", s.config.Username)
 		auth := LoginAuth(s.config.Username, s.config.Password)
 		if err = client.Auth(auth); err != nil {
-			log.Printf("LOGIN failed, retrying PLAIN: %v", err)
+			log.Printf("[SMTP DEBUG] LOGIN auth failed, trying PLAIN: %v", err)
 			auth = smtp.PlainAuth("", s.config.Username, s.config.Password, s.config.SMTPHost)
 			if err = client.Auth(auth); err != nil {
+				log.Printf("[SMTP ERROR] Authentication failed: %v", err)
 				return err
 			}
 		}
+		log.Printf("[SMTP DEBUG] Auth OK")
 	}
 
+	log.Printf("[SMTP DEBUG] MAIL FROM: %s", s.config.FromAddress)
 	if err = client.Mail(s.config.FromAddress); err != nil {
-		return err
-	}
-	if err = client.Rcpt(to); err != nil {
+		log.Printf("[SMTP ERROR] MAIL FROM failed: %v", err)
 		return err
 	}
 
+	log.Printf("[SMTP DEBUG] RCPT TO: %s", to)
+	if err = client.Rcpt(to); err != nil {
+		log.Printf("[SMTP ERROR] RCPT TO failed: %v", err)
+		return err
+	}
+
+	log.Printf("[SMTP DEBUG] Sending DATA...")
 	w, err := client.Data()
 	if err != nil {
+		log.Printf("[SMTP ERROR] DATA command failed: %v", err)
 		return err
 	}
 	_, err = w.Write([]byte(message.String()))
 	if err != nil {
+		log.Printf("[SMTP ERROR] Write failed: %v", err)
 		return err
 	}
 	err = w.Close()
 	if err != nil {
+		log.Printf("[SMTP ERROR] Close failed: %v", err)
 		return err
 	}
+	log.Printf("[SMTP DEBUG] DATA OK")
 
-	log.Printf("Email sent to %s", to)
+	log.Printf("[SMTP SUCCESS] Email sent to %s", to)
 	return client.Quit()
 }
 
@@ -727,7 +788,7 @@ func GetHierarchicalEmailService(tenantService, masterService *EmailService) *Em
 		log.Println("Using tenant-specific SMTP configuration")
 		return tenantService
 	}
-	log.Println("Falling back to master SMTP configuration")
+	log.Println("Using master SMTP configuration")
 	return masterService
 }
 
