@@ -69,7 +69,7 @@
                   <CheckCircleIcon v-else class="h-5 w-5" aria-hidden="true" />
                 </button>
                 <button
-                  @click="confirmDelete(user)"
+                  @click="openDeleteModal(user)"
                   class="p-2 text-red-400 hover:text-red-500"
                   title="حذف نهائي"
                 >
@@ -233,16 +233,37 @@
         </div>
       </div>
     </div>
+
+    <!-- Delete Confirmation Modal -->
+    <ConfirmModal
+      v-model="showDeleteModal"
+      title="حذف مستخدم"
+      :message="deleteModalMessage"
+      :danger="true"
+      :requireConfirmation="true"
+      confirmationText="أؤكد أنني أريد حذف هذا المستخدم نهائياً"
+      confirmText="حذف نهائي"
+      :loading="deleteLoading"
+      @confirm="executeDelete"
+    />
+
+    <!-- Toast Notification -->
+    <ToastNotification
+      v-model="showToast"
+      :type="toastType"
+      :message="toastMessage"
+      :duration="4000"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { Dialog, DialogPanel, DialogTitle, TransitionChild, TransitionRoot } from '@headlessui/vue'
 import { PlusIcon, PencilIcon, TrashIcon, XMarkIcon, UserIcon, UserGroupIcon, NoSymbolIcon, CheckCircleIcon } from '@heroicons/vue/24/outline'
-
-import api from '@/api'
+import { users as usersApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
+import ConfirmModal from '@/components/ConfirmModal.vue'
+import ToastNotification from '@/components/ToastNotification.vue'
 
 const authStore = useAuthStore()
 const users = ref([])
@@ -250,6 +271,32 @@ const isModalOpen = ref(false)
 const isEditing = ref(false)
 const loading = ref(false)
 const currentUserId = computed(() => authStore.user?.id)
+
+// Delete modal state
+const showDeleteModal = ref(false)
+const deleteLoading = ref(false)
+const userToDelete = ref(null)
+const deleteModalMessage = computed(() => {
+  if (!userToDelete.value) return ''
+  return `سيتم حذف المستخدم "${userToDelete.value.full_name}" بشكل نهائي.\n\n⚠️ لا يمكن التراجع عن هذا الإجراء!`
+})
+
+// Toast state
+const showToast = ref(false)
+const toastType = ref('success')
+const toastMessage = ref('')
+
+const showSuccessToast = (message) => {
+  toastType.value = 'success'
+  toastMessage.value = message
+  showToast.value = true
+}
+
+const showErrorToast = (message) => {
+  toastType.value = 'error'
+  toastMessage.value = message
+  showToast.value = true
+}
 
 const form = ref({
   id: null,
@@ -274,10 +321,11 @@ const getInitials = (name) => {
 
 const fetchUsers = async () => {
   try {
-    const response = await api.get('/users')
+    const response = await usersApi.list()
     users.value = response.data
   } catch (error) {
     console.error('Failed to fetch users:', error)
+    showErrorToast('فشل في تحميل المستخدمين')
   }
 }
 
@@ -323,18 +371,18 @@ const saveUser = async () => {
     // Validation
     const isNewUser = !form.value.id
     if (!form.value.username || !form.value.full_name || !form.value.email || (isNewUser && !form.value.password)) {
-      alert('يرجى ملء جميع الحقول المطلوبة')
+      showErrorToast('يرجى ملء جميع الحقول المطلوبة')
       return
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(form.value.email)) {
-      alert('البريد الإلكتروني غير صالح. يجب أن يكون بصيغة: example@domain.com')
+      showErrorToast('البريد الإلكتروني غير صالح. يجب أن يكون بصيغة: example@domain.com')
       return
     }
 
     if (isEditing.value) {
-      await api.put(`/users/${form.value.id}`, {
+      await usersApi.update(form.value.id, {
         full_name: form.value.full_name,
         full_name_ar: form.value.full_name_ar,
         email: form.value.email,
@@ -344,46 +392,57 @@ const saveUser = async () => {
       // Update role separately if changed
       const originalUser = users.value.find(u => u.id === form.value.id)
       if (originalUser.role !== form.value.role) {
-        await api.patch(`/users/${form.value.id}/role`, { role: form.value.role })
+        await usersApi.updateRole(form.value.id, form.value.role)
       }
     } else {
-      await api.post('/users', form.value)
+      await usersApi.create(form.value)
     }
     await fetchUsers()
     closeModal()
+    showSuccessToast(isEditing.value ? 'تم تحديث بيانات المستخدم بنجاح' : 'تم إنشاء المستخدم بنجاح')
   } catch (error) {
     console.error('Failed to save user:', error)
-    alert('حدث خطأ أثناء حفظ البيانات')
+    showErrorToast(error.response?.data?.error || 'حدث خطأ أثناء حفظ البيانات')
   } finally {
     loading.value = false
   }
 }
 
 const toggleActive = async (user) => {
-  const action = user.is_active ? 'تعطيل' : 'تنشيط'
-  if (confirm(`هل أنت متأكد من ${action} المستخدم ${user.full_name}؟`)) {
-    try {
-      await api.put(`/users/${user.id}`, {
-        ...user,
-        is_active: !user.is_active
-      })
-      await fetchUsers()
-    } catch (error) {
-      console.error('Failed to toggle user status:', error)
-      alert('حدث خطأ أثناء تغيير حالة المستخدم')
-    }
+  try {
+    await usersApi.update(user.id, {
+      ...user,
+      is_active: !user.is_active
+    })
+    await fetchUsers()
+    const action = user.is_active ? 'تم تعطيل' : 'تم تنشيط'
+    showSuccessToast(`${action} المستخدم بنجاح`)
+  } catch (error) {
+    console.error('Failed to toggle user status:', error)
+    showErrorToast('حدث خطأ أثناء تغيير حالة المستخدم')
   }
 }
 
-const confirmDelete = async (user) => {
-  if (confirm(`هل أنت متأكد من حذف المستخدم ${user.full_name} نهائياً؟ لا يمكن التراجع عن هذا الإجراء.`)) {
-    try {
-      await api.delete(`/users/${user.id}`)
-      await fetchUsers()
-    } catch (error) {
-      console.error('Failed to delete user:', error)
-      alert(error.response?.data?.error || 'حدث خطأ أثناء حذف المستخدم')
-    }
+const openDeleteModal = (user) => {
+  userToDelete.value = user
+  showDeleteModal.value = true
+}
+
+const executeDelete = async () => {
+  if (!userToDelete.value) return
+  
+  deleteLoading.value = true
+  try {
+    await usersApi.delete(userToDelete.value.id)
+    await fetchUsers()
+    showDeleteModal.value = false
+    showSuccessToast('تم حذف المستخدم بنجاح')
+  } catch (error) {
+    console.error('Failed to delete user:', error)
+    showErrorToast(error.response?.data?.error || 'حدث خطأ أثناء حذف المستخدم')
+  } finally {
+    deleteLoading.value = false
+    userToDelete.value = null
   }
 }
 

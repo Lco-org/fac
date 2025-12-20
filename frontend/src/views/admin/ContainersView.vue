@@ -73,7 +73,7 @@
                   <CheckCircleIcon v-else class="h-5 w-5" aria-hidden="true" />
                 </button>
                 <button
-                  @click="confirmDelete(container)"
+                  @click="openDeleteModal(container)"
                   class="p-2 text-red-400 hover:text-red-500"
                   title="حذف نهائي"
                 >
@@ -265,21 +265,69 @@
         </div>
       </div>
     </div>
+
+    <!-- Delete Confirmation Modal -->
+    <ConfirmModal
+      v-model="showDeleteModal"
+      :title="'حذف الحساب'"
+      :message="deleteModalMessage"
+      :danger="true"
+      :requireConfirmation="true"
+      :confirmationText="'أؤكد أنني أريد حذف هذا الحساب وجميع معاملاته نهائياً'"
+      :confirmText="'حذف نهائي'"
+      :loading="deleteLoading"
+      @confirm="executeDelete"
+    />
+
+    <!-- Toast Notification -->
+    <ToastNotification
+      v-model="showToast"
+      :type="toastType"
+      :message="toastMessage"
+      :duration="4000"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
-import { Dialog, DialogPanel, DialogTitle, TransitionChild, TransitionRoot } from '@headlessui/vue'
 import { PlusIcon, PencilIcon, TrashIcon, XMarkIcon, BanknotesIcon, BuildingLibraryIcon, NoSymbolIcon, CheckCircleIcon } from '@heroicons/vue/24/outline'
-import api from '@/api'
+import { containers as containersApi } from '@/api'
 import { useAuthStore } from '@/stores/auth'
+import ConfirmModal from '@/components/ConfirmModal.vue'
+import ToastNotification from '@/components/ToastNotification.vue'
 
 const authStore = useAuthStore()
 const containers = ref([])
 const isModalOpen = ref(false)
 const isEditing = ref(false)
 const loading = ref(false)
+
+// Delete modal state
+const showDeleteModal = ref(false)
+const deleteLoading = ref(false)
+const containerToDelete = ref(null)
+const deleteModalMessage = computed(() => {
+  if (!containerToDelete.value) return ''
+  return `سيتم حذف الحساب "${containerToDelete.value.name}" مع جميع المعاملات المالية المرتبطة به بشكل نهائي.\n\n⚠️ لا يمكن التراجع عن هذا الإجراء!`
+})
+
+// Toast state
+const showToast = ref(false)
+const toastType = ref('success')
+const toastMessage = ref('')
+
+const showSuccessToast = (message) => {
+  toastType.value = 'success'
+  toastMessage.value = message
+  showToast.value = true
+}
+
+const showErrorToast = (message) => {
+  toastType.value = 'error'
+  toastMessage.value = message
+  showToast.value = true
+}
 
 const form = ref({
   id: null,
@@ -297,10 +345,11 @@ const form = ref({
 
 const fetchContainers = async () => {
   try {
-    const response = await api.get('/containers')
+    const response = await containersApi.list()
     containers.value = response.data
   } catch (error) {
     console.error('Failed to fetch containers:', error)
+    showErrorToast('فشل في تحميل الحسابات')
   }
 }
 
@@ -348,12 +397,12 @@ const saveContainer = async () => {
   loading.value = true
   try {
     if (!form.value.name || !form.value.currency || !form.value.type) {
-      alert('يرجى إدخال اسم الحساب والعملة والنوع')
+      showErrorToast('يرجى إدخال اسم الحساب والعملة والنوع')
       return
     }
     if (form.value.type === 'bank') {
       if (!form.value.bank_name || !form.value.account_number) {
-        alert('يرجى إدخال اسم البنك ورقم الحساب للحسابات المصرفية')
+        showErrorToast('يرجى إدخال اسم البنك ورقم الحساب للحسابات المصرفية')
         return
       }
     }
@@ -361,74 +410,63 @@ const saveContainer = async () => {
     const payload = { ...form.value }
 
     if (isEditing.value) {
-      await api.put(`/containers/${form.value.id}`, payload)
+      await containersApi.update(form.value.id, payload)
     } else {
       delete payload.id
-      await api.post('/containers', payload)
+      await containersApi.create(payload)
     }
     await fetchContainers()
     closeModal()
-    alert(isEditing.value ? 'تم تحديث الحساب بنجاح' : 'تم إنشاء الحساب بنجاح')
+    showSuccessToast(isEditing.value ? 'تم تحديث الحساب بنجاح' : 'تم إنشاء الحساب بنجاح')
   } catch (error) {
     console.error('Failed to save container:', error)
     const errorMessage = error.response?.data?.error || 'حدث خطأ أثناء حفظ البيانات'
-    alert(errorMessage)
+    showErrorToast(errorMessage)
   } finally {
     loading.value = false
   }
 }
 
 const toggleActive = async (container) => {
-  const action = container.is_active ? 'تعطيل' : 'تنشيط'
-  if (confirm(`هل أنت متأكد من ${action} الحساب ${container.name}؟`)) {
-    try {
-      await api.put(`/containers/${container.id}`, {
-        ...container,
-        is_active: !container.is_active
-      })
-      await fetchContainers()
-    } catch (error) {
-      console.error('Failed to toggle container status:', error)
-      alert('حدث خطأ أثناء تغيير حالة الحساب')
-    }
+  try {
+    await containersApi.update(container.id, {
+      ...container,
+      is_active: !container.is_active
+    })
+    await fetchContainers()
+    const action = container.is_active ? 'تم تعطيل' : 'تم تنشيط'
+    showSuccessToast(`${action} الحساب بنجاح`)
+  } catch (error) {
+    console.error('Failed to toggle container status:', error)
+    showErrorToast('حدث خطأ أثناء تغيير حالة الحساب')
   }
 }
 
-const confirmDelete = async (container) => {
-  // First confirmation with strong warning
-  const firstConfirm = confirm(
-    `⚠️ تحذير: عملية خطيرة!\n\n` +
-    `سيتم حذف الحساب "${container.name}" مع جميع المعاملات المالية المرتبطة به بشكل نهائي.\n\n` +
-    `⚠️ لا يمكن التراجع عن هذا الإجراء!\n\n` +
-    `هل أنت متأكد من المتابعة؟`
-  )
+const openDeleteModal = (container) => {
+  containerToDelete.value = container
+  showDeleteModal.value = true
+}
+
+const executeDelete = async () => {
+  if (!containerToDelete.value) return
   
-  if (!firstConfirm) return
-  
-  // Second confirmation for extra safety
-  const secondConfirm = confirm(
-    `⚠️ تأكيد نهائي:\n\n` +
-    `أنت على وشك حذف "${container.name}" وجميع معاملاته المالية.\n\n` +
-    `اضغط "موافق" للمتابعة أو "إلغاء" للتراجع.`
-  )
-  
-  if (!secondConfirm) return
-  
+  deleteLoading.value = true
   try {
-    await api.delete(`/containers/${container.id}`)
+    await containersApi.delete(containerToDelete.value.id)
     await fetchContainers()
-    alert('✅ تم حذف الحساب وجميع معاملاته بنجاح')
+    showDeleteModal.value = false
+    showSuccessToast('تم حذف الحساب وجميع معاملاته بنجاح')
   } catch (error) {
     console.error('Failed to delete container:', error)
     const errorMessage = error.response?.data?.error || 'حدث خطأ أثناء حذف الحساب'
-    
-    // Translate common error messages to Arabic
     let arabicMessage = errorMessage
     if (errorMessage.includes('Container not found')) {
       arabicMessage = 'الحساب غير موجود'
     }
-    
-    alert(arabicMessage)
+    showErrorToast(arabicMessage)
+  } finally {
+    deleteLoading.value = false
+    containerToDelete.value = null
   }
 }
 

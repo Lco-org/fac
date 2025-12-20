@@ -42,7 +42,7 @@
               <button @click="openEditModal(project)" class="p-2 text-gray-400 hover:text-gray-500">
                 <PencilIcon class="h-5 w-5" />
               </button>
-              <button @click="confirmDelete(project)" class="p-2 text-red-400 hover:text-red-500">
+              <button @click="openDeleteModal(project)" class="p-2 text-red-400 hover:text-red-500">
                 <TrashIcon class="h-5 w-5" />
               </button>
             </div>
@@ -165,20 +165,69 @@
         </div>
       </Dialog>
     </TransitionRoot>
+
+    <!-- Delete Confirmation Modal -->
+    <ConfirmModal
+      v-model="showDeleteModal"
+      title="حذف مشروع"
+      :message="deleteModalMessage"
+      :danger="true"
+      :requireConfirmation="true"
+      confirmationText="أؤكد أنني أريد حذف هذا المشروع وجميع معاملاته"
+      confirmText="حذف"
+      :loading="deleteLoading"
+      @confirm="executeDelete"
+    />
+
+    <!-- Toast Notification -->
+    <ToastNotification
+      v-model="showToast"
+      :type="toastType"
+      :message="toastMessage"
+      :duration="4000"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { Dialog, DialogPanel, DialogTitle, TransitionChild, TransitionRoot } from '@headlessui/vue'
 import { PlusIcon, PencilIcon, TrashIcon, LockClosedIcon } from '@heroicons/vue/24/outline'
-import api from '@/api'
+import { projects as projectsApi, containers as containersApi } from '@/api'
+import ConfirmModal from '@/components/ConfirmModal.vue'
+import ToastNotification from '@/components/ToastNotification.vue'
 
 const projects = ref([])
 const containers = ref([])
 const isModalOpen = ref(false)
 const isLockModalOpen = ref(false)
 const isEditing = ref(false)
+
+// Delete modal state
+const showDeleteModal = ref(false)
+const deleteLoading = ref(false)
+const projectToDelete = ref(null)
+const deleteModalMessage = computed(() => {
+  if (!projectToDelete.value) return ''
+  return `سيتم حذف المشروع "${projectToDelete.value.name_ar || projectToDelete.value.name}" وجميع المعاملات المرتبطة به بشكل نهائي.`
+})
+
+// Toast state
+const showToast = ref(false)
+const toastType = ref('success')
+const toastMessage = ref('')
+
+const showSuccessToast = (message) => {
+  toastType.value = 'success'
+  toastMessage.value = message
+  showToast.value = true
+}
+
+const showErrorToast = (message) => {
+  toastType.value = 'error'
+  toastMessage.value = message
+  showToast.value = true
+}
 
 const form = ref({
   id: null,
@@ -198,10 +247,11 @@ const formatDate = (dateString) => {
 
 const fetchProjects = async () => {
   try {
-    const response = await api.get('/projects')
+    const response = await projectsApi.list()
     projects.value = response.data
   } catch (error) {
     console.error('Failed to fetch projects:', error)
+    showErrorToast('فشل في تحميل المشاريع')
   }
 }
 
@@ -233,27 +283,39 @@ const saveProject = async () => {
     }
     
     if (isEditing.value) {
-      await api.put(`/projects/${form.value.id}`, payload)
+      await projectsApi.update(form.value.id, payload)
     } else {
-      await api.post('/projects', payload)
+      await projectsApi.create(payload)
     }
     await fetchProjects()
     closeModal()
+    showSuccessToast(isEditing.value ? 'تم تحديث المشروع بنجاح' : 'تم إنشاء المشروع بنجاح')
   } catch (error) {
     console.error('Failed to save project:', error)
-    alert(error.response?.data?.error || 'حدث خطأ أثناء حفظ البيانات')
+    showErrorToast(error.response?.data?.error || 'حدث خطأ أثناء حفظ البيانات')
   }
 }
 
-const confirmDelete = async (project) => {
-  if (confirm(`هل أنت متأكد من حذف المشروع ${project.name}؟`)) {
-    try {
-      await api.delete(`/projects/${project.id}`)
-      await fetchProjects()
-    } catch (error) {
-      console.error('Failed to delete project:', error)
-      alert(error.response?.data?.error || 'حدث خطأ أثناء حذف المشروع')
-    }
+const openDeleteModal = (project) => {
+  projectToDelete.value = project
+  showDeleteModal.value = true
+}
+
+const executeDelete = async () => {
+  if (!projectToDelete.value) return
+  
+  deleteLoading.value = true
+  try {
+    await projectsApi.delete(projectToDelete.value.id)
+    await fetchProjects()
+    showDeleteModal.value = false
+    showSuccessToast('تم حذف المشروع بنجاح')
+  } catch (error) {
+    console.error('Failed to delete project:', error)
+    showErrorToast(error.response?.data?.error || 'حدث خطأ أثناء حذف المشروع')
+  } finally {
+    deleteLoading.value = false
+    projectToDelete.value = null
   }
 }
 
@@ -268,7 +330,7 @@ const lockForm = ref({
 
 const fetchContainers = async () => {
   try {
-    const response = await api.get('/containers')
+    const response = await containersApi.list()
     containers.value = response.data
   } catch (error) {
     console.error('Failed to fetch containers:', error)
@@ -289,22 +351,22 @@ const openLockModal = (project) => {
 const lockProject = async () => {
   try {
     // For now, just update the project as locked (Backend API to be implemented)
-    await api.put(`/projects/${lockForm.value.project_id}`, {
+    await projectsApi.update(lockForm.value.project_id, {
       is_locked: true,
       lock_reason: lockForm.value.reason
     })
     
     // If transfer is selected, create a transfer transaction
     if (lockForm.value.transfer_type !== 'none') {
-      alert('ملاحظة: ميزة تحويل الرصيد التلقائي قيد التطوير. يرجى إنشاء عملية تحويل يدوياً.')
+      showErrorToast('ملاحظة: ميزة تحويل الرصيد التلقائي قيد التطوير. يرجى إنشاء عملية تحويل يدوياً.')
     }
     
     await fetchProjects()
     isLockModalOpen.value = false
-    alert('تم قفل المشروع بنجاح')
+    showSuccessToast('تم قفل المشروع بنجاح')
   } catch (error) {
     console.error('Failed to lock project:', error)
-    alert(error.response?.data?.error || 'حدث خطأ أثناء قفل المشروع')
+    showErrorToast(error.response?.data?.error || 'حدث خطأ أثناء قفل المشروع')
   }
 }
 

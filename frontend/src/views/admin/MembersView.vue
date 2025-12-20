@@ -34,7 +34,7 @@
               <button @click="openEditModal(member)" class="p-2 text-gray-400 hover:text-gray-500">
                 <PencilIcon class="h-5 w-5" />
               </button>
-              <button @click="confirmDelete(member)" class="p-2 text-red-400 hover:text-red-500">
+              <button @click="openDeleteModal(member)" class="p-2 text-red-400 hover:text-red-500">
                 <TrashIcon class="h-5 w-5" />
               </button>
             </div>
@@ -94,18 +94,67 @@
         </div>
       </Dialog>
     </TransitionRoot>
+
+    <!-- Delete Confirmation Modal -->
+    <ConfirmModal
+      v-model="showDeleteModal"
+      title="حذف عضو"
+      :message="deleteModalMessage"
+      :danger="true"
+      :requireConfirmation="true"
+      confirmationText="أؤكد أنني أريد حذف هذا العضو"
+      confirmText="حذف"
+      :loading="deleteLoading"
+      @confirm="executeDelete"
+    />
+
+    <!-- Toast Notification -->
+    <ToastNotification
+      v-model="showToast"
+      :type="toastType"
+      :message="toastMessage"
+      :duration="4000"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { Dialog, DialogPanel, DialogTitle, TransitionChild, TransitionRoot } from '@headlessui/vue'
 import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/vue/24/outline'
-import api from '@/api'
+import { members as membersApi } from '@/api'
+import ConfirmModal from '@/components/ConfirmModal.vue'
+import ToastNotification from '@/components/ToastNotification.vue'
 
 const members = ref([])
 const isModalOpen = ref(false)
 const isEditing = ref(false)
+
+// Delete modal state
+const showDeleteModal = ref(false)
+const deleteLoading = ref(false)
+const memberToDelete = ref(null)
+const deleteModalMessage = computed(() => {
+  if (!memberToDelete.value) return ''
+  return `سيتم حذف العضو "${memberToDelete.value.full_name}" بشكل نهائي.`
+})
+
+// Toast state
+const showToast = ref(false)
+const toastType = ref('success')
+const toastMessage = ref('')
+
+const showSuccessToast = (message) => {
+  toastType.value = 'success'
+  toastMessage.value = message
+  showToast.value = true
+}
+
+const showErrorToast = (message) => {
+  toastType.value = 'error'
+  toastMessage.value = message
+  showToast.value = true
+}
 
 const form = ref({
   id: null,
@@ -118,10 +167,11 @@ const form = ref({
 
 const fetchMembers = async () => {
   try {
-    const response = await api.get('/members')
+    const response = await membersApi.list()
     members.value = response.data
   } catch (error) {
     console.error('Failed to fetch members:', error)
+    showErrorToast('فشل في تحميل الأعضاء')
   }
 }
 
@@ -144,27 +194,39 @@ const closeModal = () => {
 const saveMember = async () => {
   try {
     if (isEditing.value) {
-      await api.put(`/members/${form.value.id}`, form.value)
+      await membersApi.update(form.value.id, form.value)
     } else {
-      await api.post('/members', form.value)
+      await membersApi.create(form.value)
     }
     await fetchMembers()
     closeModal()
+    showSuccessToast(isEditing.value ? 'تم تحديث بيانات العضو بنجاح' : 'تم إضافة العضو بنجاح')
   } catch (error) {
     console.error('Failed to save member:', error)
-    alert('حدث خطأ أثناء حفظ البيانات')
+    showErrorToast(error.response?.data?.error || 'حدث خطأ أثناء حفظ البيانات')
   }
 }
 
-const confirmDelete = async (member) => {
-  if (confirm(`هل أنت متأكد من حذف العضو ${member.full_name}؟`)) {
-    try {
-      await api.delete(`/members/${member.id}`)
-      await fetchMembers()
-    } catch (error) {
-      console.error('Failed to delete member:', error)
-      alert(error.response?.data?.error || 'حدث خطأ أثناء حذف العضو')
-    }
+const openDeleteModal = (member) => {
+  memberToDelete.value = member
+  showDeleteModal.value = true
+}
+
+const executeDelete = async () => {
+  if (!memberToDelete.value) return
+  
+  deleteLoading.value = true
+  try {
+    await membersApi.delete(memberToDelete.value.id)
+    await fetchMembers()
+    showDeleteModal.value = false
+    showSuccessToast('تم حذف العضو بنجاح')
+  } catch (error) {
+    console.error('Failed to delete member:', error)
+    showErrorToast(error.response?.data?.error || 'حدث خطأ أثناء حذف العضو')
+  } finally {
+    deleteLoading.value = false
+    memberToDelete.value = null
   }
 }
 

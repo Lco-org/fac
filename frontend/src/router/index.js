@@ -164,7 +164,53 @@ const routes = [
                 component: () => import('@/views/reports/InvoicesReportView.vue'),
                 meta: { title: 'تقرير الفواتير', requiresPermission: 'view_invoices' }
             },
+            {
+                path: 'admin/invoices-management',
+                name: 'InvoicesManagement',
+                component: () => import('@/views/admin/InvoicesManagementView.vue'),
+                meta: { requiresRole: ['admin'], title: 'إدارة الفواتير' }
+            },
+            {
+                path: 'admin/receipts-management',
+                name: 'ReceiptsManagement',
+                component: () => import('@/views/admin/ReceiptsManagementView.vue'),
+                meta: { requiresRole: ['admin'], title: 'إدارة الإيصالات' }
+            },
+
+            // ==========================================================================
+            // NEW MODULES (Phase 3 & 4)
+            // ==========================================================================
+            {
+                path: 'system/notifications',
+                name: 'Notifications',
+                component: () => import('@/views/notifications/NotificationsView.vue'),
+                meta: { title: 'التنبيهات' }
+            },
+            {
+                path: 'admin/backups',
+                name: 'SystemBackups',
+                component: () => import('@/views/admin/BackupsView.vue'),
+                meta: { requiresRole: ['admin'], title: 'النسخ الاحتياطي' }
+            },
+            {
+                path: 'admin/activity-logs',
+                name: 'ActivityLogs',
+                component: () => import('@/views/admin/ActivityLogsView.vue'),
+                meta: { requiresRole: ['admin'], title: 'سجل النشاطات' }
+            },
         ],
+    },
+    {
+        path: '/legal/privacy-policy',
+        name: 'PrivacyPolicy',
+        component: () => import('@/views/legal/PrivacyPolicyView.vue'),
+        meta: { requiresAuth: false, title: 'سياسة الخصوصية' }
+    },
+    {
+        path: '/legal/terms-of-service',
+        name: 'TermsOfService',
+        component: () => import('@/views/legal/TermsOfServiceView.vue'),
+        meta: { requiresAuth: false, title: 'شروط الخدمة' }
     },
     {
         path: '/receipt/:id',
@@ -219,9 +265,21 @@ const routes = [
         meta: { requiresAuth: true, requiresRole: ['system_admin'] },
     },
     {
+        path: '/b8fb17/ssa/plans',
+        name: 'SSASubscriptionPlans',
+        component: () => import('@/views/ssa/SubscriptionPlansView.vue'),
+        meta: { requiresAuth: true, requiresRole: ['system_admin'] },
+    },
+    {
         path: '/b8fb17/ssa/organization/:id',
         name: 'SSAOrganizationDetail',
         component: () => import('@/views/ssa/OrganizationDetailView.vue'),
+        meta: { requiresAuth: true, requiresRole: ['system_admin'] },
+    },
+    {
+        path: '/b8fb17/ssa/audit-logs',
+        name: 'SSAAuditLogs',
+        component: () => import('@/views/ssa/SSAAuditLogsView.vue'),
         meta: { requiresAuth: true, requiresRole: ['system_admin'] },
     },
 ]
@@ -237,9 +295,12 @@ router.beforeEach(async (to, from, next) => {
 
     if (to.meta.requiresAuth || to.path.startsWith('/reports/')) {
         if (!authStore.isAuthenticated) {
-            // Try to fetch current user
             const success = await authStore.fetchCurrentUser()
             if (!success) {
+                // Check if trying to access SSA area
+                if (to.path.startsWith('/b8fb17/ssa')) {
+                    return next('/b8fb17/ssa/login')
+                }
                 return next('/login')
             }
         }

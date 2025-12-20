@@ -230,3 +230,28 @@ func (h *SSAAuthHandler) GetCurrentAdmin(c *fiber.Ctx) error {
 		"admin_id": adminID,
 	})
 }
+
+// GetAuditLogs returns SSA audit logs
+// GET /api/v1/ssa/audit-logs
+func (h *SSAAuthHandler) GetAuditLogs(c *fiber.Ctx) error {
+	limit := c.QueryInt("limit", 50)
+	offset := c.QueryInt("offset", 0)
+
+	if limit > 100 {
+		limit = 100
+	}
+
+	logs, total, err := h.authService.GetAuditLogs(c.Context(), limit, offset)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "فشل جلب سجل العمليات",
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"logs":   logs,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	})
+}

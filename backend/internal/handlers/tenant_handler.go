@@ -4,7 +4,10 @@ import (
 	"cso-erp/internal/config"
 	"cso-erp/internal/middleware"
 	"cso-erp/internal/models"
+	"cso-erp/internal/security"
 	"cso-erp/internal/services"
+	"cso-erp/internal/validation"
+	"log"
 	"strconv"
 
 	"github.com/gofiber/fiber/v2"
@@ -13,17 +16,19 @@ import (
 
 // TenantHandler handles multi-tenant operations for Super System Admin
 type TenantHandler struct {
-	tenantService *services.TenantService
-	emailService  *services.EmailService
-	cfg           *config.Config
+	tenantService  *services.TenantService
+	emailService   *services.EmailService
+	ssaAuthService *services.SSAAuthService
+	cfg            *config.Config
 }
 
 // NewTenantHandler creates a new tenant handler
-func NewTenantHandler(tenantService *services.TenantService, emailService *services.EmailService, cfg *config.Config) *TenantHandler {
+func NewTenantHandler(tenantService *services.TenantService, emailService *services.EmailService, ssaAuthService *services.SSAAuthService, cfg *config.Config) *TenantHandler {
 	return &TenantHandler{
-		tenantService: tenantService,
-		emailService:  emailService,
-		cfg:           cfg,
+		tenantService:  tenantService,
+		emailService:   emailService,
+		ssaAuthService: ssaAuthService,
+		cfg:            cfg,
 	}
 }
 
@@ -71,7 +76,7 @@ func (h *TenantHandler) CreateOrganization(c *fiber.Ctx) error {
 		err = h.emailService.SendVerificationCode(req.ContactEmail, org.Name, code)
 		if err != nil {
 			// Log error but don't fail - code was generated
-			// log.Printf("Failed to send verification email: %v", err)
+			log.Printf("Failed to send verification email: %v", err)
 		}
 	}
 
@@ -108,6 +113,36 @@ func (h *TenantHandler) ListOrganizations(c *fiber.Ctx) error {
 	})
 }
 
+// UpdateOrganizationSubscription updates an organization's subscription
+// PUT /api/ssa/organizations/:id/subscription
+func (h *TenantHandler) UpdateOrganizationSubscription(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid organization ID"})
+	}
+
+	var req models.UpdateOrganizationSubscriptionRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request body"})
+	}
+
+	v := validation.New()
+	v.UUIDRequired("subscription_plan_id", req.SubscriptionPlanID)
+
+	if v.HasErrors() {
+		return c.Status(fiber.StatusBadRequest).JSON(v.Errors().ToMap())
+	}
+
+	err = h.tenantService.UpdateOrganizationSubscription(c.Context(), id, &req)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{
+		"message": "Subscription updated successfully",
+	})
+}
+
 // GetOrganization gets a single organization
 // GET /api/ssa/organizations/:id
 func (h *TenantHandler) GetOrganization(c *fiber.Ctx) error {
@@ -127,6 +162,103 @@ func (h *TenantHandler) GetOrganization(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(org)
+}
+
+// ListSubscriptionPlans returns available subscription plans
+// GET /api/ssa/subscription-plans
+func (h *TenantHandler) ListSubscriptionPlans(c *fiber.Ctx) error {
+	plans, err := h.tenantService.ListSubscriptionPlans(c.Context())
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"error": "failed to list plans",
+		})
+	}
+	return c.JSON(fiber.Map{
+		"plans": plans,
+	})
+}
+
+// GetSubscriptionPlan returns a single subscription plan
+// GET /api/ssa/subscription-plans/:id
+func (h *TenantHandler) GetSubscriptionPlan(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid plan ID"})
+	}
+
+	plan, err := h.tenantService.GetSubscriptionPlan(c.Context(), id)
+	if err != nil {
+		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{"plan": plan})
+}
+
+// CreateSubscriptionPlan creates a new subscription plan
+// POST /api/ssa/subscription-plans
+func (h *TenantHandler) CreateSubscriptionPlan(c *fiber.Ctx) error {
+	var req models.CreateSubscriptionPlanRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+	}
+
+	v := validation.New()
+	v.Required("name", req.Name)
+	v.Required("code", req.Code)
+	v.AlphaNumeric("code", req.Code)
+	v.Required("currency", req.Currency)
+	v.LengthBetween("currency", req.Currency, 3, 3)
+	v.NonNegativeFloat("price_monthly", req.PriceMonthly)
+	v.NonNegativeFloat("price_yearly", req.PriceYearly)
+	v.PositiveInt("max_users", req.MaxUsers)
+	v.PositiveInt("max_storage_gb", req.MaxStorageGB)
+
+	if v.HasErrors() {
+		return c.Status(fiber.StatusBadRequest).JSON(v.Errors().ToMap())
+	}
+
+	plan, err := h.tenantService.CreateSubscriptionPlan(c.Context(), &req)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.Status(fiber.StatusCreated).JSON(fiber.Map{"plan": plan})
+}
+
+// UpdateSubscriptionPlan updates a subscription plan
+// PUT /api/ssa/subscription-plans/:id
+func (h *TenantHandler) UpdateSubscriptionPlan(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid plan ID"})
+	}
+
+	var req models.UpdateSubscriptionPlanRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid request body"})
+	}
+
+	plan, err := h.tenantService.UpdateSubscriptionPlan(c.Context(), id, &req)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{"plan": plan})
+}
+
+// DeleteSubscriptionPlan deletes a subscription plan
+// DELETE /api/ssa/subscription-plans/:id
+func (h *TenantHandler) DeleteSubscriptionPlan(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "invalid plan ID"})
+	}
+
+	if err := h.tenantService.DeleteSubscriptionPlan(c.Context(), id); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{"message": "subscription plan deleted"})
 }
 
 // GetOrganizationStats gets dashboard statistics (SSA only)
@@ -385,5 +517,159 @@ func (h *TenantHandler) ActivateOrganization(c *fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{
 		"message": "Organization activated successfully",
+	})
+}
+
+// ============================================================================
+// ORGANIZATION DELETION (with OTP verification)
+// ============================================================================
+
+// RequestDeletion initiates organization deletion by sending OTP to admin's registered email
+// Requires password verification before sending OTP
+// POST /api/ssa/organizations/:id/request-deletion
+func (h *TenantHandler) RequestDeletion(c *fiber.Ctx) error {
+	idStr := c.Params("id")
+	orgID, err := uuid.Parse(idStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "معرف المنظمة غير صالح",
+		})
+	}
+
+	// Get admin ID from JWT context
+	adminID := middleware.GetUserID(c)
+	if adminID == uuid.Nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "غير مصرح",
+		})
+	}
+
+	// Parse request - ONLY password required (email comes from database)
+	var req struct {
+		Password string `json:"password"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "بيانات غير صالحة",
+		})
+	}
+
+	if req.Password == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "كلمة المرور مطلوبة للتحقق",
+		})
+	}
+
+	// Get admin from database to verify password and get registered email
+	admin, err := h.ssaAuthService.GetAdminByID(c.Context(), adminID)
+	if err != nil || admin == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "لم يتم العثور على المدير",
+		})
+	}
+
+	// Verify password using Argon2id
+	validPassword, err := security.VerifyPassword(req.Password, admin.PasswordHash)
+	if err != nil || !validPassword {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "كلمة المرور غير صحيحة",
+		})
+	}
+
+	// Request deletion with OTP - using ONLY admin's registered email from DB
+	result, err := h.tenantService.RequestOrganizationDeletion(
+		c.Context(),
+		orgID,
+		adminID,
+		admin.Email,    // ✅ Email from database, NOT user input
+		admin.FullName, // ✅ Name from database, NOT user input
+		c.IP(),
+		h.emailService,
+	)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	// Mask email for response
+	maskedEmail := maskEmail(admin.Email)
+
+	return c.JSON(fiber.Map{
+		"success":      true,
+		"message":      "تم إرسال رمز التحقق إلى بريدك الإلكتروني المسجل",
+		"masked_email": maskedEmail,
+		"request_id":   result.RequestID,
+		"expires_at":   result.ExpiresAt,
+	})
+}
+
+// maskEmail masks email for display (e.g., su***@lco.org.ly)
+func maskEmail(email string) string {
+	atIndex := -1
+	for i, c := range email {
+		if c == '@' {
+			atIndex = i
+			break
+		}
+	}
+	if atIndex < 2 {
+		return "***" + email[atIndex:]
+	}
+	return email[:2] + "***" + email[atIndex:]
+}
+
+// ConfirmDeletion verifies OTP and permanently deletes organization
+// POST /api/ssa/organizations/:id/confirm-deletion
+func (h *TenantHandler) ConfirmDeletion(c *fiber.Ctx) error {
+	idStr := c.Params("id")
+	orgID, err := uuid.Parse(idStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "معرف المنظمة غير صالح",
+		})
+	}
+
+	// Get admin info from context
+	adminID := middleware.GetUserID(c)
+	if adminID == uuid.Nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"error": "غير مصرح",
+		})
+	}
+
+	// Parse request body
+	var req struct {
+		Code string `json:"code"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "بيانات غير صالحة",
+		})
+	}
+
+	if len(req.Code) != 6 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "رمز التحقق يجب أن يكون 6 أحرف",
+		})
+	}
+
+	// Confirm deletion with OTP
+	err = h.tenantService.ConfirmOrganizationDeletion(
+		c.Context(),
+		orgID,
+		req.Code,
+		adminID,
+		c.IP(),
+	)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": err.Error(),
+		})
+	}
+
+	return c.JSON(fiber.Map{
+		"success": true,
+		"message": "تم حذف المنظمة وجميع بياناتها نهائياً",
 	})
 }

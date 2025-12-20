@@ -7,10 +7,12 @@ import (
 	"cso-erp/internal/middleware"
 	"cso-erp/internal/models"
 	"cso-erp/internal/services"
+	"cso-erp/internal/swagger"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -84,6 +86,21 @@ func main() {
 	receiptService := services.NewReceiptService(db)
 	hrService := services.NewHRService(db)
 
+	// Phase 3: Features Services
+	// File Service
+	fileService, err := services.NewFileService(db, "./uploads")
+	if err != nil {
+		log.Printf("⚠️ Failed to initialize FileService: %v", err)
+	}
+
+	activityService := services.NewActivityService(db)
+	backupService := services.NewBackupService(db, "./backups")
+
+	// Notification Service with background expiry checker
+	notificationService := services.NewNotificationService(db, emailService)
+	notificationService.StartExpiryChecker(24 * time.Hour) // Check daily
+	defer notificationService.StopExpiryChecker()
+
 	authHandler := handlers.NewAuthHandler(masterDB, cfg, emailService)
 	userHandler := handlers.NewUserHandler(cfg, emailService)
 	emailTemplateHandler := handlers.NewEmailTemplateHandler(cfg)
@@ -99,6 +116,17 @@ func main() {
 	receiptHandler := handlers.NewReceiptHandler(receiptService)
 	hrHandler := handlers.NewHRHandler(hrService)
 	emailHandler := handlers.NewEmailHandler(emailService, userService, employeeService, memberService)
+
+	// Feature Handlers
+	attachmentHandler := handlers.NewAttachmentHandler(fileService)
+	activityHandler := handlers.NewActivityHandler(activityService)
+	backupHandler := handlers.NewBackupHandler(backupService)
+	notificationHandler := handlers.NewNotificationHandler(notificationService)
+
+	// Commercial Handlers
+	invoiceService := services.NewInvoiceService(db)
+	invoiceHandler := handlers.NewInvoiceHandler(invoiceService)
+	legalHandler := handlers.NewLegalHandler()
 
 	app := fiber.New(fiber.Config{
 		AppName:      "CSO ERP System",
@@ -128,6 +156,15 @@ func main() {
 		})
 	})
 
+	// Setup Swagger API documentation
+	swagger.SetupSwaggerRoutes(app, swagger.Config{
+		Title:       "CSO-ERP API",
+		Version:     "1.0.0",
+		Description: "Multi-Tenant SaaS ERP Platform API Documentation",
+		BasePath:    "/api/v1",
+		Host:        cfg.App.Host + ":" + cfg.App.Port,
+	})
+
 	api := app.Group("/api/v1")
 
 	auth := api.Group("/auth")
@@ -138,6 +175,42 @@ func main() {
 	auth.Post("/resend-otp", middleware.RateLimitMiddleware(&cfg.Security), authHandler.ResendOTP)
 
 	protected := api.Group("", middleware.AuthMiddleware(&cfg.JWT))
+
+	// Attachments Routes
+	attachments := protected.Group("/attachments")
+	attachments.Post("/upload", attachmentHandler.UploadAttachment)
+	attachments.Get("", attachmentHandler.GetAttachments)
+	attachments.Get("/:id/download", attachmentHandler.DownloadAttachment)
+	attachments.Delete("/:id", attachmentHandler.DeleteAttachment)
+
+	// Activity Logs Routes
+	activities := protected.Group("/activities", middleware.RequireRole(models.RoleAdmin))
+	activities.Get("/entity", activityHandler.GetEntityActivities)
+	activities.Get("/user", activityHandler.GetUserActivities)
+
+	// Backup Routes
+	backups := protected.Group("/backups", middleware.RequireRole(models.RoleAdmin))
+	backups.Post("", backupHandler.CreateBackup)
+	backups.Get("", backupHandler.ListBackups)
+
+	// Notification Routes
+	notifications := protected.Group("/notifications")
+	notifications.Get("", notificationHandler.GetNotifications)
+	notifications.Get("/unread-count", notificationHandler.GetUnreadCount)
+	notifications.Post("/:id/read", notificationHandler.MarkAsRead)
+	notifications.Post("/read-all", notificationHandler.MarkAllAsRead)
+
+	// Invoice Routes
+	invoices := protected.Group("/invoices")
+	invoices.Get("", invoiceHandler.ListInvoices)
+	invoices.Get("/:id", invoiceHandler.GetInvoice)
+	invoices.Get("/:id/print", invoiceHandler.PrintInvoice)
+	invoices.Post("/from-transaction/:transaction_id", invoiceHandler.GenerateFromTransaction)
+
+	// Legal Pages (Public)
+	legal := api.Group("/legal")
+	legal.Get("/privacy-policy", legalHandler.GetPrivacyPolicy)
+	legal.Get("/terms-of-service", legalHandler.GetTermsOfService)
 
 	protectedAuth := protected.Group("/auth")
 	protectedAuth.Post("/revoke-all-sessions", authHandler.RevokeAllSessions)
@@ -245,13 +318,13 @@ func main() {
 	// Note: These routes require RoleSystemAdmin and additional SSA middleware
 	// The SSA middleware includes: IP restriction, rate limiting, and 2FA check
 
-	// Initialize Tenant Service and Handler for SSA operations (using MASTER DB)
-	tenantService := services.NewTenantService(masterDB, cfg)
-	tenantHandler := handlers.NewTenantHandler(tenantService, emailService, cfg)
-
-	// Initialize SSA Auth Service and Handler (using MASTER DB)
+	// Initialize SSA Auth Service first (needed by TenantHandler)
 	ssaAuthService := services.NewSSAAuthService(masterDB, cfg, emailService)
 	ssaAuthHandler := handlers.NewSSAAuthHandler(ssaAuthService, cfg)
+
+	// Initialize Tenant Service and Handler for SSA operations (using MASTER DB)
+	tenantService := services.NewTenantService(masterDB, cfg)
+	tenantHandler := handlers.NewTenantHandler(tenantService, emailService, ssaAuthService, cfg)
 
 	// SSA Auth Routes - No auth middleware (these are for initial login)
 	// Registered directly on app to avoid ANY middleware from api group
@@ -269,7 +342,16 @@ func main() {
 	// SSA Profile
 	ssa.Get("/me", ssaAuthHandler.GetMe)
 
+	// SSA Audit Logs
+	ssa.Get("/audit-logs", ssaAuthHandler.GetAuditLogs)
+
 	// Organization Management
+	ssa.Get("/subscription-plans", tenantHandler.ListSubscriptionPlans)
+	ssa.Post("/subscription-plans", tenantHandler.CreateSubscriptionPlan)
+	ssa.Get("/subscription-plans/:id", tenantHandler.GetSubscriptionPlan)
+	ssa.Put("/subscription-plans/:id", tenantHandler.UpdateSubscriptionPlan)
+	ssa.Delete("/subscription-plans/:id", tenantHandler.DeleteSubscriptionPlan)
+
 	ssa.Get("/stats", tenantHandler.GetOrganizationStats)
 	ssa.Get("/organizations", tenantHandler.ListOrganizations)
 	ssa.Post("/organizations", tenantHandler.CreateOrganization)
@@ -278,6 +360,9 @@ func main() {
 	// Domain Verification
 	ssa.Post("/organizations/:id/verify", tenantHandler.VerifyDomain)
 	ssa.Post("/organizations/:id/resend-verification", tenantHandler.ResendVerification)
+
+	// Subscription Management
+	ssa.Put("/organizations/:id/subscription", tenantHandler.UpdateOrganizationSubscription)
 
 	// Database Creation
 	ssa.Post("/organizations/:id/database", tenantHandler.CreateDatabase)
@@ -288,6 +373,10 @@ func main() {
 	// Organization Status Management
 	ssa.Post("/organizations/:id/suspend", tenantHandler.SuspendOrganization)
 	ssa.Post("/organizations/:id/activate", tenantHandler.ActivateOrganization)
+
+	// Organization Deletion (with OTP verification)
+	ssa.Post("/organizations/:id/request-deletion", tenantHandler.RequestDeletion)
+	ssa.Post("/organizations/:id/confirm-deletion", tenantHandler.ConfirmDeletion)
 
 	log.Printf("🔐 SSA Routes configured at /api/v1/ssa/*")
 

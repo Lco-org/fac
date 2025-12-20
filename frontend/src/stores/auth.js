@@ -182,11 +182,30 @@ export const useAuthStore = defineStore('auth', () => {
         }
     }
 
+    // Organization Features
+    const organizationFeatures = ref([])
+
+    const hasFeature = (feature) => {
+        // System Admins have access to everything
+        if (userRole.value === 'system_admin') return true
+        return organizationFeatures.value.includes(feature)
+    }
+
+    // ... existing canWrite/canDelete ...
+
     // Get current user
     const fetchCurrentUser = async () => {
         try {
             const response = await api.get('/users/me')
-            user.value = response.data
+
+            // Handle new structure with organization_features
+            if (response.data.user) {
+                user.value = response.data.user
+                organizationFeatures.value = response.data.organization_features || []
+            } else {
+                user.value = response.data
+                organizationFeatures.value = []
+            }
             return true
         } catch (error) {
             return await fetchSSAUser()
@@ -227,6 +246,10 @@ export const useAuthStore = defineStore('auth', () => {
         changePassword,
         toggle2FA,
         fetchCurrentUser,
+        toggle2FA,
+        fetchCurrentUser,
         fetchSSAUser,
+        hasFeature,
+        organizationFeatures,
     }
 })

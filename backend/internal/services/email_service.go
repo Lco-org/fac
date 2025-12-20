@@ -779,6 +779,93 @@ func (s *EmailService) SendBulkWithTemplate(ctx context.Context, recipients []Em
 	return result
 }
 
+// SendDeletionOTPEmail sends OTP for organization deletion confirmation
+func (s *EmailService) SendDeletionOTPEmail(ctx context.Context, toEmail, adminName, orgName, code string) error {
+	if err := validateEmail(toEmail); err != nil {
+		return err
+	}
+
+	adminName = sanitizeHeader(adminName)
+	orgName = sanitizeHeader(orgName)
+
+	subject := "⚠️ تأكيد حذف منظمة - رمز التحقق"
+	body := fmt.Sprintf(`<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Arial, sans-serif; direction: rtl; margin: 0; padding: 0; background-color: #1a1a1a; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { background: linear-gradient(135deg, #dc2626 0%%, #b91c1c 100%%); color: white; padding: 30px; text-align: center; border-radius: 12px 12px 0 0; }
+        .header h1 { margin: 0; font-size: 24px; }
+        .header .badge { display: inline-block; background: rgba(255,255,255,0.2); padding: 5px 15px; border-radius: 20px; font-size: 12px; margin-top: 10px; }
+        .content { background: #292929; padding: 30px; border: 1px solid #404040; color: #e2e8f0; }
+        .danger-box { background: rgba(220, 38, 38, 0.2); border: 2px solid #dc2626; border-radius: 10px; padding: 20px; margin: 20px 0; }
+        .danger-box h3 { color: #fca5a5; margin-top: 0; }
+        .org-name { background: #3f3f3f; padding: 15px; border-radius: 8px; margin: 15px 0; text-align: center; font-size: 20px; color: #fbbf24; }
+        .code-box { background: linear-gradient(135deg, #dc2626 0%%, #b91c1c 100%%); color: white; font-size: 36px; letter-spacing: 10px; padding: 25px; text-align: center; margin: 25px 0; border-radius: 12px; font-family: 'Courier New', monospace; font-weight: bold; }
+        .warning-list { background: rgba(251, 191, 36, 0.1); border: 1px solid #fbbf24; border-radius: 8px; padding: 15px 25px; color: #fcd34d; margin: 20px 0; }
+        .warning-list li { margin: 10px 0; }
+        .footer { background: #0f0f0f; color: #6b7280; padding: 20px; text-align: center; font-size: 12px; border-radius: 0 0 12px 12px; }
+        .shield { font-size: 48px; margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="shield">🗑️</div>
+            <h1>تأكيد حذف منظمة</h1>
+            <div class="badge">⚠️ عملية لا يمكن التراجع عنها</div>
+        </div>
+        <div class="content">
+            <p>مرحباً <strong>%s</strong>،</p>
+            <p>تم طلب حذف المنظمة التالية نهائياً:</p>
+            
+            <div class="org-name">
+                🏢 %s
+            </div>
+            
+            <div class="danger-box">
+                <h3>⚠️ تحذير شديد الأهمية</h3>
+                <p>هذه العملية ستؤدي إلى:</p>
+                <ul>
+                    <li>حذف قاعدة بيانات المنظمة بالكامل</li>
+                    <li>حذف جميع بيانات المستخدمين والمعاملات</li>
+                    <li>حذف جميع الملفات والمرفقات</li>
+                    <li><strong>لا يمكن استرجاع أي بيانات بعد الحذف!</strong></li>
+                </ul>
+            </div>
+            
+            <p style="text-align: center;">إذا كنت متأكداً، استخدم رمز التحقق التالي:</p>
+            <div class="code-box">%s</div>
+            <p style="text-align: center; color: #94a3b8;">⏱️ صلاحية الرمز: <strong style="color: #ef4444;">10 دقائق</strong></p>
+            
+            <div class="warning-list">
+                <strong>🔒 إجراءات الأمان:</strong>
+                <ul>
+                    <li>لا تشارك هذا الرمز مع أي شخص</li>
+                    <li>إذا لم تطلب هذه العملية، تواصل مع الدعم فوراً</li>
+                    <li>سيتم تسجيل هذه العملية في سجل المراجعة</li>
+                </ul>
+            </div>
+            
+            <p style="font-size: 13px; color: #6b7280; text-align: center;">
+                تم إرسال هذا الطلب في: %s
+            </p>
+        </div>
+        <div class="footer">
+            <p>هذا بريد آلي عالي الأمان من نظام CSO ERP</p>
+            <p>© منظمة LCO - جميع الحقوق محفوظة</p>
+        </div>
+    </div>
+</body>
+</html>`, adminName, orgName, code, time.Now().Format("2006-01-02 15:04:05"))
+
+	return s.SendEmail(ctx, toEmail, subject, body, true)
+}
+
 // GetConfig returns the email configuration (useful for testing)
 func (s *EmailService) GetConfig() *EmailConfig {
 	return s.config

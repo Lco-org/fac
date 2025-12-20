@@ -328,10 +328,73 @@ func (s *SSAAuthService) updateLastLogin(ctx context.Context, adminID uuid.UUID)
 // logAuditEvent logs SSA action
 func (s *SSAAuthService) logAuditEvent(ctx context.Context, adminID uuid.UUID, action, ipAddress, details string) {
 	query := `
-		INSERT INTO super_admin_audit (admin_id, action, ip_address, details)
-		VALUES ($1, $2, $3, $4)
+		INSERT INTO super_admin_audit (admin_id, admin_email, action, resource_type, ip_address, created_at)
+		SELECT $1, email, $2, 'system', $3::inet, NOW()
+		FROM super_system_admins WHERE id = $1
 	`
-	s.masterDB.ExecContext(ctx, query, adminID, action, ipAddress, details)
+	s.masterDB.ExecContext(ctx, query, adminID, action, ipAddress)
+}
+
+// SSAAuditLog represents an audit log entry
+type SSAAuditLog struct {
+	ID           uuid.UUID  `json:"id"`
+	AdminID      uuid.UUID  `json:"admin_id"`
+	AdminEmail   string     `json:"admin_email"`
+	Action       string     `json:"action"`
+	ResourceType string     `json:"resource_type"`
+	ResourceID   *uuid.UUID `json:"resource_id,omitempty"`
+	IPAddress    string     `json:"ip_address"`
+	CreatedAt    time.Time  `json:"created_at"`
+}
+
+// GetAuditLogs retrieves SSA audit logs
+func (s *SSAAuthService) GetAuditLogs(ctx context.Context, limit, offset int) ([]SSAAuditLog, int, error) {
+	// Get total count
+	var total int
+	err := s.masterDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM super_admin_audit").Scan(&total)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	query := `
+		SELECT id, admin_id, admin_email, action, resource_type, resource_id, 
+		       host(ip_address) as ip, created_at
+		FROM super_admin_audit
+		ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2
+	`
+
+	rows, err := s.masterDB.QueryContext(ctx, query, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var logs []SSAAuditLog
+	for rows.Next() {
+		var log SSAAuditLog
+		var resourceID *string
+		var ip *string
+
+		if err := rows.Scan(
+			&log.ID, &log.AdminID, &log.AdminEmail, &log.Action,
+			&log.ResourceType, &resourceID, &ip, &log.CreatedAt,
+		); err != nil {
+			return nil, 0, err
+		}
+
+		if resourceID != nil {
+			uid, _ := uuid.Parse(*resourceID)
+			log.ResourceID = &uid
+		}
+		if ip != nil {
+			log.IPAddress = *ip
+		}
+
+		logs = append(logs, log)
+	}
+
+	return logs, total, nil
 }
 
 // generateOTPCode generates a random numeric OTP

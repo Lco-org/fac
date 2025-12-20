@@ -37,7 +37,7 @@
               <button @click="openEditModal(employee)" class="p-2 text-gray-400 hover:text-gray-500">
                 <PencilIcon class="h-5 w-5" />
               </button>
-              <button @click="confirmDelete(employee)" class="p-2 text-red-400 hover:text-red-500">
+              <button @click="openDeleteModal(employee)" class="p-2 text-red-400 hover:text-red-500">
                 <TrashIcon class="h-5 w-5" />
               </button>
             </div>
@@ -127,18 +127,67 @@
         </div>
       </Dialog>
     </TransitionRoot>
+
+    <!-- Delete Confirmation Modal -->
+    <ConfirmModal
+      v-model="showDeleteModal"
+      title="حذف موظف"
+      :message="deleteModalMessage"
+      :danger="true"
+      :requireConfirmation="true"
+      confirmationText="أؤكد أنني أريد حذف هذا الموظف"
+      confirmText="حذف"
+      :loading="deleteLoading"
+      @confirm="executeDelete"
+    />
+
+    <!-- Toast Notification -->
+    <ToastNotification
+      v-model="showToast"
+      :type="toastType"
+      :message="toastMessage"
+      :duration="4000"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { Dialog, DialogPanel, DialogTitle, TransitionChild, TransitionRoot } from '@headlessui/vue'
 import { PlusIcon, PencilIcon, TrashIcon } from '@heroicons/vue/24/outline'
-import api from '@/api'
+import { employees as employeesApi } from '@/api'
+import ConfirmModal from '@/components/ConfirmModal.vue'
+import ToastNotification from '@/components/ToastNotification.vue'
 
 const employees = ref([])
 const isModalOpen = ref(false)
 const isEditing = ref(false)
+
+// Delete modal state
+const showDeleteModal = ref(false)
+const deleteLoading = ref(false)
+const employeeToDelete = ref(null)
+const deleteModalMessage = computed(() => {
+  if (!employeeToDelete.value) return ''
+  return `سيتم حذف الموظف "${employeeToDelete.value.full_name}" بشكل نهائي.`
+})
+
+// Toast state
+const showToast = ref(false)
+const toastType = ref('success')
+const toastMessage = ref('')
+
+const showSuccessToast = (message) => {
+  toastType.value = 'success'
+  toastMessage.value = message
+  showToast.value = true
+}
+
+const showErrorToast = (message) => {
+  toastType.value = 'error'
+  toastMessage.value = message
+  showToast.value = true
+}
 
 const form = ref({
   id: null,
@@ -161,10 +210,11 @@ const formatCurrency = (amount) => {
 
 const fetchEmployees = async () => {
   try {
-    const response = await api.get('/employees')
+    const response = await employeesApi.list()
     employees.value = response.data
   } catch (error) {
     console.error('Failed to fetch employees:', error)
+    showErrorToast('فشل في تحميل الموظفين')
   }
 }
 
@@ -187,27 +237,39 @@ const closeModal = () => {
 const saveEmployee = async () => {
   try {
     if (isEditing.value) {
-      await api.put(`/employees/${form.value.id}`, form.value)
+      await employeesApi.update(form.value.id, form.value)
     } else {
-      await api.post('/employees', form.value)
+      await employeesApi.create(form.value)
     }
     await fetchEmployees()
     closeModal()
+    showSuccessToast(isEditing.value ? 'تم تحديث بيانات الموظف بنجاح' : 'تم إضافة الموظف بنجاح')
   } catch (error) {
     console.error('Failed to save employee:', error)
-    alert('حدث خطأ أثناء حفظ البيانات')
+    showErrorToast(error.response?.data?.error || 'حدث خطأ أثناء حفظ البيانات')
   }
 }
 
-const confirmDelete = async (employee) => {
-  if (confirm(`هل أنت متأكد من حذف الموظف ${employee.full_name}؟`)) {
-    try {
-      await api.delete(`/employees/${employee.id}`)
-      await fetchEmployees()
-    } catch (error) {
-      console.error('Failed to delete employee:', error)
-      alert(error.response?.data?.error || 'حدث خطأ أثناء حذف الموظف')
-    }
+const openDeleteModal = (employee) => {
+  employeeToDelete.value = employee
+  showDeleteModal.value = true
+}
+
+const executeDelete = async () => {
+  if (!employeeToDelete.value) return
+  
+  deleteLoading.value = true
+  try {
+    await employeesApi.delete(employeeToDelete.value.id)
+    await fetchEmployees()
+    showDeleteModal.value = false
+    showSuccessToast('تم حذف الموظف بنجاح')
+  } catch (error) {
+    console.error('Failed to delete employee:', error)
+    showErrorToast(error.response?.data?.error || 'حدث خطأ أثناء حذف الموظف')
+  } finally {
+    deleteLoading.value = false
+    employeeToDelete.value = null
   }
 }
 

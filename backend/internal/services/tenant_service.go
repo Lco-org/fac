@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -57,31 +58,68 @@ func (s *TenantService) CreateOrganization(ctx context.Context, req *models.Crea
 		return nil, fmt.Errorf("organization with this domain or database name already exists")
 	}
 
+	// Get Subscription Plan
+	var planID uuid.UUID
+	if req.SubscriptionPlanCode != "" {
+		err = s.masterDB.QueryRowContext(ctx, "SELECT id FROM subscription_plans WHERE code = $1", req.SubscriptionPlanCode).Scan(&planID)
+	} else {
+		// Fallback to default/cheapest active plan
+		err = s.masterDB.QueryRowContext(ctx, "SELECT id FROM subscription_plans WHERE is_active = true ORDER BY price_monthly ASC LIMIT 1").Scan(&planID)
+	}
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// Fallback to basic if not found or error, but better to error out
+			return nil, fmt.Errorf("invalid subscription plan code")
+		}
+		return nil, fmt.Errorf("failed to get subscription plan: %w", err)
+	}
+
+	now := time.Now()
+	startDate := now
+	if req.SubscriptionStart != nil {
+		startDate = *req.SubscriptionStart
+	}
+
+	var expiresAt *time.Time
+	if req.SubscriptionEnd != nil {
+		expiresAt = req.SubscriptionEnd
+	} else {
+		// Default 1 year if not provided? Or keep nil for lifetime?
+		// Let's rely on frontend or default logic.
+		// If basic (free), maybe no expiry. If pro, maybe 1 month?
+		// For now, let's just use what's passed or nil.
+	}
+
 	org := &models.Organization{
-		ID:                 uuid.New(),
-		Name:               req.Name,
-		NameAr:             req.NameAr,
-		Slug:               slug,
-		PrimaryDomain:      req.Domain,
-		DatabaseName:       dbName,
-		ContactEmail:       req.ContactEmail,
-		ContactPhone:       req.ContactPhone,
-		Status:             models.OrgStatusPendingVerification,
-		SubscriptionStatus: "trial",
-		CreatedAt:          time.Now(),
-		UpdatedAt:          time.Now(),
-		CreatedBy:          createdBy,
+		ID:                    uuid.New(),
+		Name:                  req.Name,
+		NameAr:                req.NameAr,
+		Slug:                  slug,
+		PrimaryDomain:         req.Domain,
+		DatabaseName:          dbName,
+		ContactEmail:          req.ContactEmail,
+		ContactPhone:          req.ContactPhone,
+		Status:                models.OrgStatusPendingVerification,
+		SubscriptionPlanID:    &planID,
+		SubscriptionStatus:    "active", // Default to active if created by SSA
+		SubscriptionStartDate: &startDate,
+		SubscriptionExpires:   expiresAt,
+		CreatedAt:             now,
+		UpdatedAt:             now,
+		CreatedBy:             createdBy,
 	}
 
 	// Insert organization
 	_, err = s.masterDB.ExecContext(ctx, `
 		INSERT INTO organizations (
 			id, name, name_ar, slug, primary_domain, database_name,
-			contact_email, contact_phone, status, subscription_status,
+			contact_email, contact_phone, status,
+			subscription_plan_id, subscription_status, subscription_start_date, subscription_expires_at,
 			created_at, updated_at, created_by
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 	`, org.ID, org.Name, org.NameAr, org.Slug, org.PrimaryDomain, org.DatabaseName,
-		org.ContactEmail, org.ContactPhone, org.Status, org.SubscriptionStatus,
+		org.ContactEmail, org.ContactPhone, org.Status,
+		org.SubscriptionPlanID, org.SubscriptionStatus, org.SubscriptionStartDate, org.SubscriptionExpires,
 		org.CreatedAt, org.UpdatedAt, org.CreatedBy)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create organization: %w", err)
@@ -238,14 +276,14 @@ func (s *TenantService) CreateTenantDatabase(ctx context.Context, dbName string)
 	if err != nil {
 		return fmt.Errorf("failed to connect to new tenant database for cleanup: %w", err)
 	}
-	defer tenantDB.Close()
+	// defer tenantDB.Close() - Do not close cached connection
 
 	// Truncate all tables to ensure empty schema
 	_, err = tenantDB.ExecContext(ctx, `
 		DO $$ DECLARE
 			r RECORD;
 		BEGIN
-			FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') LOOP
+			FOR r IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ('dashboard_widgets')) LOOP
 				EXECUTE 'TRUNCATE TABLE ' || quote_ident(r.tablename) || ' CASCADE';
 			END LOOP;
 		END $$;
@@ -273,10 +311,15 @@ func (s *TenantService) CreateTenantAdmin(ctx context.Context, org *models.Organ
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to tenant database: %w", err)
 	}
+	// defer tenantDB.Close() - Do not close cached connection
+
+	// Use a fresh context with timeout to avoid premature cancellation
+	execCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
 	// Create admin user
 	userID := uuid.New()
-	_, err = tenantDB.ExecContext(ctx, `
+	_, err = tenantDB.ExecContext(execCtx, `
 		INSERT INTO users (
 			id, username, email, password_hash, full_name, full_name_ar,
 			role, is_active, two_factor_enabled, created_at, updated_at
@@ -301,18 +344,18 @@ func (s *TenantService) GetOrganizationByID(ctx context.Context, id uuid.UUID) (
 	var org models.Organization
 	var nameAr, contactPhone, logoURL sql.NullString
 	var subscriptionPlanID sql.NullString
-	var subscriptionExpires, verifiedAt, suspendedAt sql.NullTime
+	var subscriptionStartDate, subscriptionExpires, verifiedAt, suspendedAt sql.NullTime
 
 	err := s.masterDB.QueryRowContext(ctx, `
 		SELECT id, name, name_ar, slug, primary_domain, database_name,
 			   contact_email, contact_phone, status, subscription_plan_id,
-			   subscription_status, subscription_expires_at, logo_url,
+			   subscription_status, subscription_start_date, subscription_expires_at, logo_url,
 			   created_at, updated_at, verified_at, suspended_at, created_by
 		FROM organizations WHERE id = $1
 	`, id).Scan(
 		&org.ID, &org.Name, &nameAr, &org.Slug, &org.PrimaryDomain, &org.DatabaseName,
 		&org.ContactEmail, &contactPhone, &org.Status, &subscriptionPlanID,
-		&org.SubscriptionStatus, &subscriptionExpires, &logoURL,
+		&org.SubscriptionStatus, &subscriptionStartDate, &subscriptionExpires, &logoURL,
 		&org.CreatedAt, &org.UpdatedAt, &verifiedAt, &suspendedAt, &org.CreatedBy,
 	)
 	if err == sql.ErrNoRows {
@@ -332,6 +375,9 @@ func (s *TenantService) GetOrganizationByID(ctx context.Context, id uuid.UUID) (
 	if logoURL.Valid {
 		org.LogoURL = &logoURL.String
 	}
+	if subscriptionStartDate.Valid {
+		org.SubscriptionStartDate = &subscriptionStartDate.Time
+	}
 	if subscriptionExpires.Valid {
 		org.SubscriptionExpires = &subscriptionExpires.Time
 	}
@@ -341,8 +387,74 @@ func (s *TenantService) GetOrganizationByID(ctx context.Context, id uuid.UUID) (
 	if suspendedAt.Valid {
 		org.SuspendedAt = &suspendedAt.Time
 	}
+	if subscriptionPlanID.Valid {
+		id, err := uuid.Parse(subscriptionPlanID.String)
+		if err == nil {
+			org.SubscriptionPlanID = &id
+		}
+	}
 
 	return &org, nil
+}
+
+// UpdateOrganizationSubscription updates an organization's subscription details
+func (s *TenantService) UpdateOrganizationSubscription(ctx context.Context, id uuid.UUID, req *models.UpdateOrganizationSubscriptionRequest) error {
+	// Parse Plan ID
+	planID, err := uuid.Parse(req.SubscriptionPlanID)
+	if err != nil {
+		return fmt.Errorf("invalid plan ID: %w", err)
+	}
+
+	// Verify plan exists
+	var planExists bool
+	err = s.masterDB.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM subscription_plans WHERE id = $1)", planID).Scan(&planExists)
+	if err != nil {
+		return fmt.Errorf("failed to verify plan: %w", err)
+	}
+	if !planExists {
+		return fmt.Errorf("subscription plan not found")
+	}
+
+	// Build dynamic query
+	query := "UPDATE organizations SET subscription_plan_id = $1, updated_at = NOW()"
+	args := []interface{}{planID}
+	argIdx := 2
+
+	if req.SubscriptionStart != nil {
+		query += fmt.Sprintf(", subscription_start_date = $%d", argIdx)
+		args = append(args, req.SubscriptionStart)
+		argIdx++
+	}
+
+	if req.SubscriptionEnd != nil {
+		query += fmt.Sprintf(", subscription_expires_at = $%d", argIdx)
+		args = append(args, req.SubscriptionEnd)
+		argIdx++
+	}
+
+	if req.SubscriptionStatus != "" {
+		query += fmt.Sprintf(", subscription_status = $%d", argIdx)
+		args = append(args, req.SubscriptionStatus)
+		argIdx++
+	}
+
+	query += fmt.Sprintf(" WHERE id = $%d", argIdx)
+	args = append(args, id)
+
+	result, err := s.masterDB.ExecContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to update subscription: %w", err)
+	}
+
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("organization not found")
+	}
+
+	return nil
 }
 
 // GetOrganizationByDomain retrieves an organization by domain
@@ -443,6 +555,238 @@ func (s *TenantService) ActivateOrganization(ctx context.Context, orgID uuid.UUI
 	return nil
 }
 
+// ListSubscriptionPlans lists all available subscription plans
+func (s *TenantService) ListSubscriptionPlans(ctx context.Context) ([]models.SubscriptionPlan, error) {
+	rows, err := s.masterDB.QueryContext(ctx, `
+		SELECT id, name, name_ar, code, price_monthly, price_yearly, currency, 
+		       max_users, max_storage_gb, features, is_active, is_default, 
+		       sort_order, description, description_ar
+		FROM subscription_plans
+		ORDER BY sort_order ASC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list plans: %w", err)
+	}
+	defer rows.Close()
+
+	var plans []models.SubscriptionPlan
+	for rows.Next() {
+		var p models.SubscriptionPlan
+		var featuresJSON []byte
+
+		if err := rows.Scan(
+			&p.ID, &p.Name, &p.NameAr, &p.Code, &p.PriceMonthly, &p.PriceYearly, &p.Currency,
+			&p.MaxUsers, &p.MaxStorageGB, &featuresJSON, &p.IsActive, &p.IsDefault,
+			&p.SortOrder, &p.Description, &p.DescriptionAr,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan plan: %w", err)
+		}
+
+		if err := json.Unmarshal(featuresJSON, &p.Features); err != nil {
+			// Log error but continue? Or just default to empty
+			p.Features = []string{}
+		}
+
+		plans = append(plans, p)
+	}
+
+	return plans, nil
+}
+
+// CreateSubscriptionPlan creates a new subscription plan
+func (s *TenantService) CreateSubscriptionPlan(ctx context.Context, req *models.CreateSubscriptionPlanRequest) (*models.SubscriptionPlan, error) {
+	// Check if code exists
+	var exists bool
+	err := s.masterDB.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM subscription_plans WHERE code = $1)", req.Code).Scan(&exists)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check plan code: %w", err)
+	}
+	if exists {
+		return nil, fmt.Errorf("subscription plan with code %s already exists", req.Code)
+	}
+
+	featuresJSON, err := json.Marshal(req.Features)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal features: %w", err)
+	}
+
+	plan := &models.SubscriptionPlan{
+		ID:            uuid.New(),
+		Name:          req.Name,
+		NameAr:        req.NameAr,
+		Code:          req.Code,
+		PriceMonthly:  req.PriceMonthly,
+		PriceYearly:   req.PriceYearly,
+		Currency:      req.Currency,
+		MaxUsers:      req.MaxUsers,
+		MaxStorageGB:  req.MaxStorageGB,
+		Features:      req.Features,
+		IsActive:      req.IsActive,
+		IsDefault:     req.IsDefault,
+		SortOrder:     req.SortOrder,
+		Description:   req.Description,
+		DescriptionAr: req.DescriptionAr,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+
+	_, err = s.masterDB.ExecContext(ctx, `
+		INSERT INTO subscription_plans (
+			id, name, name_ar, code, price_monthly, price_yearly, currency,
+			max_users, max_storage_gb, features, is_active, is_default,
+			sort_order, description, description_ar, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+	`, plan.ID, plan.Name, plan.NameAr, plan.Code, plan.PriceMonthly, plan.PriceYearly, plan.Currency,
+		plan.MaxUsers, plan.MaxStorageGB, featuresJSON, plan.IsActive, plan.IsDefault,
+		plan.SortOrder, plan.Description, plan.DescriptionAr, plan.CreatedAt, plan.UpdatedAt)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to create subscription plan: %w", err)
+	}
+
+	return plan, nil
+}
+
+// GetSubscriptionPlan retrieves a subscription plan by ID
+func (s *TenantService) GetSubscriptionPlan(ctx context.Context, id uuid.UUID) (*models.SubscriptionPlan, error) {
+	var plan models.SubscriptionPlan
+	var featuresJSON []byte
+
+	err := s.masterDB.QueryRowContext(ctx, `
+		SELECT id, name, name_ar, code, price_monthly, price_yearly, currency,
+			   max_users, max_storage_gb, features, is_active, is_default,
+			   sort_order, description, description_ar, created_at, updated_at
+		FROM subscription_plans WHERE id = $1
+	`, id).Scan(
+		&plan.ID, &plan.Name, &plan.NameAr, &plan.Code, &plan.PriceMonthly, &plan.PriceYearly, &plan.Currency,
+		&plan.MaxUsers, &plan.MaxStorageGB, &featuresJSON, &plan.IsActive, &plan.IsDefault,
+		&plan.SortOrder, &plan.Description, &plan.DescriptionAr, &plan.CreatedAt, &plan.UpdatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("subscription plan not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get subscription plan: %w", err)
+	}
+
+	if err := json.Unmarshal(featuresJSON, &plan.Features); err != nil {
+		plan.Features = []string{}
+	}
+
+	return &plan, nil
+}
+
+// UpdateSubscriptionPlan updates an existing subscription plan
+func (s *TenantService) UpdateSubscriptionPlan(ctx context.Context, id uuid.UUID, req *models.UpdateSubscriptionPlanRequest) (*models.SubscriptionPlan, error) {
+	// Check existence
+	_, err := s.GetSubscriptionPlan(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build query dynamically
+	query := "UPDATE subscription_plans SET updated_at = $1"
+	args := []any{time.Now()}
+	argID := 2
+
+	if req.Name != nil {
+		query += fmt.Sprintf(", name = $%d", argID)
+		args = append(args, *req.Name)
+		argID++
+	}
+	if req.NameAr != nil {
+		query += fmt.Sprintf(", name_ar = $%d", argID)
+		args = append(args, *req.NameAr)
+		argID++
+	}
+	if req.PriceMonthly != nil {
+		query += fmt.Sprintf(", price_monthly = $%d", argID)
+		args = append(args, *req.PriceMonthly)
+		argID++
+	}
+	if req.PriceYearly != nil {
+		query += fmt.Sprintf(", price_yearly = $%d", argID)
+		args = append(args, *req.PriceYearly)
+		argID++
+	}
+	if req.MaxUsers != nil {
+		query += fmt.Sprintf(", max_users = $%d", argID)
+		args = append(args, *req.MaxUsers)
+		argID++
+	}
+	if req.MaxStorageGB != nil {
+		query += fmt.Sprintf(", max_storage_gb = $%d", argID)
+		args = append(args, *req.MaxStorageGB)
+		argID++
+	}
+	if req.Features != nil {
+		featuresJSON, _ := json.Marshal(req.Features)
+		query += fmt.Sprintf(", features = $%d", argID)
+		args = append(args, featuresJSON)
+		argID++
+	}
+	if req.IsActive != nil {
+		query += fmt.Sprintf(", is_active = $%d", argID)
+		args = append(args, *req.IsActive)
+		argID++
+	}
+	if req.IsDefault != nil {
+		query += fmt.Sprintf(", is_default = $%d", argID)
+		args = append(args, *req.IsDefault)
+		argID++
+	}
+	if req.SortOrder != nil {
+		query += fmt.Sprintf(", sort_order = $%d", argID)
+		args = append(args, *req.SortOrder)
+		argID++
+	}
+	if req.Description != nil {
+		query += fmt.Sprintf(", description = $%d", argID)
+		args = append(args, *req.Description)
+		argID++
+	}
+	if req.DescriptionAr != nil {
+		query += fmt.Sprintf(", description_ar = $%d", argID)
+		args = append(args, *req.DescriptionAr)
+		argID++
+	}
+
+	query += fmt.Sprintf(" WHERE id = $%d", argID)
+	args = append(args, id)
+
+	_, err = s.masterDB.ExecContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update subscription plan: %w", err)
+	}
+
+	return s.GetSubscriptionPlan(ctx, id)
+}
+
+// DeleteSubscriptionPlan deletes a subscription plan
+func (s *TenantService) DeleteSubscriptionPlan(ctx context.Context, id uuid.UUID) error {
+	// Check if any organizations are using this plan
+	var count int
+	err := s.masterDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM organizations WHERE subscription_plan_id = $1", id).Scan(&count)
+	if err != nil {
+		return fmt.Errorf("failed to check plan usage: %w", err)
+	}
+	if count > 0 {
+		return fmt.Errorf("cannot delete plan used by %d organizations", count)
+	}
+
+	res, err := s.masterDB.ExecContext(ctx, "DELETE FROM subscription_plans WHERE id = $1", id)
+	if err != nil {
+		return fmt.Errorf("failed to delete plan: %w", err)
+	}
+
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("plan not found")
+	}
+
+	return nil
+}
+
 // GetOrganizationStats returns statistics for SSA dashboard
 func (s *TenantService) GetOrganizationStats(ctx context.Context) (*models.OrganizationStats, error) {
 	stats := &models.OrganizationStats{}
@@ -528,4 +872,226 @@ func sanitizeDBName(name string) string {
 	// Allow alphanumeric, underscores, and hyphens
 	reg := regexp.MustCompile(`[^a-zA-Z0-9_-]`)
 	return reg.ReplaceAllString(name, "")
+}
+
+// ============================================================================
+// ORGANIZATION DELETION
+// ============================================================================
+
+// DeletionRequestResult contains the result of a deletion request
+type DeletionRequestResult struct {
+	RequestID string    `json:"request_id"`
+	ExpiresAt time.Time `json:"expires_at"`
+	Message   string    `json:"message"`
+}
+
+// RequestOrganizationDeletion initiates the deletion process by generating OTP
+func (s *TenantService) RequestOrganizationDeletion(ctx context.Context, orgID, adminID uuid.UUID, adminEmail, adminName string, requestIP string, emailService interface {
+	SendDeletionOTPEmail(ctx context.Context, toEmail, adminName, orgName, code string) error
+}) (*DeletionRequestResult, error) {
+	// Get organization to verify it exists
+	org, err := s.GetOrganizationByID(ctx, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("organization not found: %w", err)
+	}
+
+	// Check if there's already a pending deletion request
+	var existingCount int
+	err = s.masterDB.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM org_deletion_requests WHERE organization_id = $1 AND expires_at > NOW()",
+		orgID).Scan(&existingCount)
+	if err == nil && existingCount > 0 {
+		return nil, fmt.Errorf("طلب حذف معلق موجود بالفعل. يرجى الانتظار أو استخدام الرمز المرسل")
+	}
+
+	// Delete any expired requests
+	_, _ = s.masterDB.ExecContext(ctx,
+		"DELETE FROM org_deletion_requests WHERE organization_id = $1",
+		orgID)
+
+	// Generate 6-digit OTP
+	code := generateRandomCode(6)
+	hashedCode := hashVerificationCode(code)
+	expiresAt := time.Now().Add(10 * time.Minute)
+	requestID := uuid.New()
+
+	// Insert deletion request
+	_, err = s.masterDB.ExecContext(ctx, `
+		INSERT INTO org_deletion_requests (
+			id, organization_id, admin_id, code_hash, expires_at, request_ip
+		) VALUES ($1, $2, $3, $4, $5, $6)
+	`, requestID, orgID, adminID, hashedCode, expiresAt, requestIP)
+	if err != nil {
+		return nil, fmt.Errorf("فشل في إنشاء طلب الحذف: %w", err)
+	}
+
+	// Send OTP via email
+	if emailService != nil {
+		err = emailService.SendDeletionOTPEmail(ctx, adminEmail, adminName, org.Name, code)
+		if err != nil {
+			// Rollback the request if email fails
+			s.masterDB.ExecContext(ctx, "DELETE FROM org_deletion_requests WHERE id = $1", requestID)
+			return nil, fmt.Errorf("فشل في إرسال رمز التحقق: %w", err)
+		}
+	}
+
+	return &DeletionRequestResult{
+		RequestID: requestID.String(),
+		ExpiresAt: expiresAt,
+		Message:   "تم إرسال رمز التحقق إلى بريدك الإلكتروني",
+	}, nil
+}
+
+// ConfirmOrganizationDeletion verifies OTP and performs deletion
+func (s *TenantService) ConfirmOrganizationDeletion(ctx context.Context, orgID uuid.UUID, code string, adminID uuid.UUID, verifyIP string) error {
+	hashedCode := hashVerificationCode(code)
+
+	// Get pending deletion request
+	var request struct {
+		ID          uuid.UUID
+		CodeHash    string
+		ExpiresAt   time.Time
+		Attempts    int
+		MaxAttempts int
+	}
+	err := s.masterDB.QueryRowContext(ctx, `
+		SELECT id, code_hash, expires_at, attempts, max_attempts
+		FROM org_deletion_requests
+		WHERE organization_id = $1 AND expires_at > NOW()
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, orgID).Scan(&request.ID, &request.CodeHash, &request.ExpiresAt, &request.Attempts, &request.MaxAttempts)
+
+	if err != nil {
+		return fmt.Errorf("لا يوجد طلب حذف معلق أو انتهت صلاحيته")
+	}
+
+	// Check expiry
+	if time.Now().After(request.ExpiresAt) {
+		s.masterDB.ExecContext(ctx, "DELETE FROM org_deletion_requests WHERE id = $1", request.ID)
+		return fmt.Errorf("انتهت صلاحية رمز التحقق")
+	}
+
+	// Check max attempts
+	if request.Attempts >= request.MaxAttempts {
+		s.masterDB.ExecContext(ctx, "DELETE FROM org_deletion_requests WHERE id = $1", request.ID)
+		return fmt.Errorf("تجاوزت الحد الأقصى للمحاولات")
+	}
+
+	// Increment attempts
+	_, _ = s.masterDB.ExecContext(ctx,
+		"UPDATE org_deletion_requests SET attempts = attempts + 1 WHERE id = $1",
+		request.ID)
+
+	// Verify code
+	if request.CodeHash != hashedCode {
+		remainingAttempts := request.MaxAttempts - request.Attempts - 1
+		return fmt.Errorf("رمز التحقق غير صحيح. المحاولات المتبقية: %d", remainingAttempts)
+	}
+
+	// Get organization details for deletion
+	org, err := s.GetOrganizationByID(ctx, orgID)
+	if err != nil {
+		return fmt.Errorf("فشل في جلب بيانات المنظمة: %w", err)
+	}
+
+	// Perform the actual deletion
+	err = s.DeleteOrganization(ctx, org, adminID, verifyIP)
+	if err != nil {
+		return err
+	}
+
+	// Clean up deletion request
+	s.masterDB.ExecContext(ctx, "DELETE FROM org_deletion_requests WHERE id = $1", request.ID)
+
+	return nil
+}
+
+// DeleteOrganization performs the actual deletion of organization and its database
+func (s *TenantService) DeleteOrganization(ctx context.Context, org *models.Organization, deletedBy uuid.UUID, deleteIP string) error {
+	// Start transaction for master DB operations
+	tx, err := s.masterDB.BeginTx(ctx)
+	if err != nil {
+		return fmt.Errorf("فشل في بدء عملية الحذف: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Log the deletion in audit before deleting
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO super_admin_audit (admin_id, admin_email, action, resource_type, resource_id, old_values, ip_address)
+		VALUES ($1, '', 'delete_organization', 'organization', $2, $3, $4)
+	`, deletedBy, org.ID, fmt.Sprintf(`{"name":"%s","database":"%s","domain":"%s"}`, org.Name, org.DatabaseName, org.PrimaryDomain), deleteIP)
+	if err != nil {
+		return fmt.Errorf("فشل في تسجيل العملية في سجل المراجعة: %w", err)
+	}
+
+	// Delete from organizations table (CASCADE will handle related tables)
+	result, err := tx.ExecContext(ctx, "DELETE FROM organizations WHERE id = $1", org.ID)
+	if err != nil {
+		return fmt.Errorf("فشل في حذف سجل المنظمة: %w", err)
+	}
+
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected == 0 {
+		return fmt.Errorf("المنظمة غير موجودة")
+	}
+
+	// Commit master DB transaction
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("فشل في تأكيد عملية الحذف: %w", err)
+	}
+
+	// Drop the tenant database
+	// Note: This is done after committing the transaction to ensure master records are deleted first
+	err = s.DropTenantDatabase(ctx, org.DatabaseName)
+	if err != nil {
+		// Log but don't fail - the organization record is already deleted
+		// This prevents orphaned organization records
+		fmt.Printf("Warning: Failed to drop database %s: %v\n", org.DatabaseName, err)
+	}
+
+	return nil
+}
+
+// DropTenantDatabase drops the tenant's database
+func (s *TenantService) DropTenantDatabase(ctx context.Context, dbName string) error {
+	// Sanitize database name to prevent SQL injection
+	safeDBName := sanitizeDBName(dbName)
+	if safeDBName == "" {
+		return fmt.Errorf("invalid database name")
+	}
+
+	// Terminate all connections to the database first
+	_, err := s.masterDB.ExecContext(ctx, `
+		SELECT pg_terminate_backend(pid) 
+		FROM pg_stat_activity 
+		WHERE datname = $1 AND pid <> pg_backend_pid()
+	`, safeDBName)
+	if err != nil {
+		// Don't fail if this errors - database might not have any connections
+		fmt.Printf("Warning: Could not terminate connections to %s: %v\n", safeDBName, err)
+	}
+
+	// Check if database exists before trying to drop
+	var exists bool
+	err = s.masterDB.QueryRowContext(ctx,
+		"SELECT EXISTS(SELECT 1 FROM pg_database WHERE datname = $1)",
+		safeDBName).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("failed to check database existence: %w", err)
+	}
+
+	if !exists {
+		// Database doesn't exist, nothing to drop
+		return nil
+	}
+
+	// Drop the database
+	// Note: DROP DATABASE cannot be run inside a transaction
+	_, err = s.masterDB.ExecContext(ctx, fmt.Sprintf(`DROP DATABASE IF EXISTS "%s"`, safeDBName))
+	if err != nil {
+		return fmt.Errorf("فشل في حذف قاعدة البيانات: %w", err)
+	}
+
+	return nil
 }

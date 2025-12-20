@@ -129,15 +129,31 @@ onMounted(() => {
             إدارة المنظمات والأنظمة المتعددة
           </p>
         </div>
-        <button 
-          @click="goToCreate"
-          class="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl font-bold shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-0.5"
-        >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
-          </svg>
-          إنشاء منظمة جديدة
-        </button>
+        <div class="flex gap-3">
+          <button 
+            @click="router.push({ name: 'SSAAuditLogs' })"
+            class="inline-flex items-center gap-2 px-6 py-3 bg-white text-gray-700 border border-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 rounded-xl font-bold shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-all font-medium"
+          >
+            <span class="text-xl">📋</span>
+            سجل العمليات
+          </button>
+          <button 
+            @click="router.push({ name: 'SSASubscriptionPlans' })"
+            class="inline-flex items-center gap-2 px-6 py-3 bg-white text-gray-700 border border-gray-200 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 rounded-xl font-bold shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-all font-medium"
+          >
+            <span class="text-xl">💳</span>
+            إدارة الخطط
+          </button>
+          <button 
+            @click="goToCreate"
+            class="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-xl font-bold shadow-lg hover:shadow-xl transition-all transform hover:-translate-y-0.5"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/>
+            </svg>
+            إنشاء منظمة جديدة
+          </button>
+        </div>
       </div>
 
       <!-- Error Alert -->

@@ -1,6 +1,7 @@
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import ssa from '@/api/ssa'
 
 const router = useRouter()
 
@@ -10,8 +11,13 @@ const form = reactive({
   name_ar: '',
   domain: '',
   contact_email: '',
-  contact_phone: ''
+  contact_phone: '',
+  subscription_plan_code: '',
+  subscription_start: new Date().toISOString().split('T')[0],
+  subscription_end: ''
 })
+
+const plans = ref([])
 
 const loading = ref(false)
 const error = ref(null)
@@ -21,9 +27,9 @@ const createdOrg = ref(null)
 // API Base URL
 const API_BASE = '/api/v1/ssa'
 
-// Validate domain format
+// Validate domain format - supports .com, .com.ly, .org.ly, etc.
 const isValidDomain = (domain) => {
-  const pattern = /^[a-zA-Z0-9][a-zA-Z0-9-]*\.[a-zA-Z]{2,}$/
+  const pattern = /^[a-zA-Z0-9][a-zA-Z0-9-]*(\.[a-zA-Z]{2,})+$/
   return pattern.test(domain)
 }
 
@@ -33,14 +39,33 @@ const isValidEmail = (email) => {
   return pattern.test(email)
 }
 
-// Form validation
-const isFormValid = ref(false)
-const validateForm = () => {
-  isFormValid.value = 
+// Form validation - computed for reactivity
+const isFormValid = computed(() => {
+  return (
     form.name.length >= 2 &&
     form.domain.length > 0 && isValidDomain(form.domain) &&
-    form.contact_email.length > 0 && isValidEmail(form.contact_email)
+    form.contact_email.length > 0 && isValidEmail(form.contact_email) &&
+    form.subscription_plan_code.length > 0
+  )
+})
+
+const fetchPlans = async () => {
+  try {
+    const response = await ssa.organizations.getPlans()
+    plans.value = response.data.plans || []
+    // Set default if exists
+    const defaultPlan = plans.value.find(p => p.is_default)
+    if (defaultPlan) {
+      form.subscription_plan_code = defaultPlan.code
+    }
+  } catch (err) {
+    console.error('Failed to fetch plans', err)
+  }
 }
+
+onMounted(() => {
+  fetchPlans()
+})
 
 // Submit form
 const submitForm = async () => {
@@ -63,7 +88,10 @@ const submitForm = async () => {
         name_ar: form.name_ar || null,
         domain: form.domain,
         contact_email: form.contact_email,
-        contact_phone: form.contact_phone || null
+        contact_phone: form.contact_phone || null,
+        subscription_plan_code: form.subscription_plan_code,
+        subscription_start: form.subscription_start ? new Date(form.subscription_start).toISOString() : null,
+        subscription_end: form.subscription_end ? new Date(form.subscription_end).toISOString() : null
       })
     })
     
@@ -156,7 +184,7 @@ const goToVerification = () => {
           </p>
         </div>
 
-        <form @submit.prevent="submitForm" @input="validateForm">
+        <form @submit.prevent="submitForm">
           <!-- Organization Name -->
           <div class="mb-6">
             <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
@@ -233,6 +261,46 @@ const goToVerification = () => {
               class="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
               dir="ltr"
             />
+          </div>
+
+          <!-- Subscription Plan -->
+          <div class="mb-6">
+            <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+              خطة الاشتراك <span class="text-red-500">*</span>
+            </label>
+            <select 
+              v-model="form.subscription_plan_code"
+              class="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+            >
+              <option value="" disabled>اختر خطة الاشتراك</option>
+              <option v-for="plan in plans" :key="plan.code" :value="plan.code">
+                {{ plan.name_ar || plan.name }} - {{ plan.price_monthly }} {{ plan.currency }} / شهرياً
+              </option>
+            </select>
+          </div>
+
+          <!-- Dates -->
+          <div class="grid grid-cols-2 gap-4 mb-8">
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                تاريخ البدء
+              </label>
+              <input 
+                v-model="form.subscription_start"
+                type="date" 
+                class="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                تاريخ الانتهاء
+              </label>
+              <input 
+                v-model="form.subscription_end"
+                type="date" 
+                class="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+              />
+            </div>
           </div>
 
           <!-- Submit Button -->

@@ -688,25 +688,26 @@ const (
 
 // Organization represents a tenant in the multi-tenant system
 type Organization struct {
-	ID                  uuid.UUID          `json:"id"`
-	Name                string             `json:"name"`
-	NameAr              *string            `json:"name_ar,omitempty"`
-	Slug                string             `json:"slug"`
-	PrimaryDomain       string             `json:"primary_domain"`
-	DatabaseName        string             `json:"database_name"`
-	ContactEmail        string             `json:"contact_email"`
-	ContactPhone        *string            `json:"contact_phone,omitempty"`
-	Status              OrganizationStatus `json:"status"`
-	SubscriptionPlanID  *uuid.UUID         `json:"subscription_plan_id,omitempty"`
-	SubscriptionStatus  string             `json:"subscription_status"`
-	SubscriptionExpires *time.Time         `json:"subscription_expires_at,omitempty"`
-	LogoURL             *string            `json:"logo_url,omitempty"`
-	Settings            map[string]any     `json:"settings,omitempty"`
-	CreatedAt           time.Time          `json:"created_at"`
-	UpdatedAt           time.Time          `json:"updated_at"`
-	VerifiedAt          *time.Time         `json:"verified_at,omitempty"`
-	SuspendedAt         *time.Time         `json:"suspended_at,omitempty"`
-	CreatedBy           uuid.UUID          `json:"created_by"`
+	ID                    uuid.UUID          `json:"id"`
+	Name                  string             `json:"name"`
+	NameAr                *string            `json:"name_ar,omitempty"`
+	Slug                  string             `json:"slug"`
+	PrimaryDomain         string             `json:"primary_domain"`
+	DatabaseName          string             `json:"database_name"`
+	ContactEmail          string             `json:"contact_email"`
+	ContactPhone          *string            `json:"contact_phone,omitempty"`
+	Status                OrganizationStatus `json:"status"`
+	SubscriptionPlanID    *uuid.UUID         `json:"subscription_plan_id,omitempty"`
+	SubscriptionStatus    string             `json:"subscription_status"`
+	SubscriptionStartDate *time.Time         `json:"subscription_start_date,omitempty"`
+	SubscriptionExpires   *time.Time         `json:"subscription_expires_at,omitempty"`
+	LogoURL               *string            `json:"logo_url,omitempty"`
+	Settings              map[string]any     `json:"settings,omitempty"`
+	CreatedAt             time.Time          `json:"created_at"`
+	UpdatedAt             time.Time          `json:"updated_at"`
+	VerifiedAt            *time.Time         `json:"verified_at,omitempty"`
+	SuspendedAt           *time.Time         `json:"suspended_at,omitempty"`
+	CreatedBy             uuid.UUID          `json:"created_by"`
 }
 
 // AllowedDomain represents a domain allowed for an organization
@@ -800,13 +801,58 @@ type SuperAdminAudit struct {
 // MULTI-TENANT REQUEST/RESPONSE STRUCTS
 // ============================================================================
 
+// CreateSubscriptionPlanRequest for creating a new plan
+type CreateSubscriptionPlanRequest struct {
+	Name          string   `json:"name" validate:"required,min=2,max=100"`
+	NameAr        *string  `json:"name_ar,omitempty"`
+	Code          string   `json:"code" validate:"required,min=2,max=50,alphanum"`
+	PriceMonthly  float64  `json:"price_monthly" validate:"gte=0"`
+	PriceYearly   float64  `json:"price_yearly" validate:"gte=0"`
+	Currency      string   `json:"currency" validate:"required,len=3"`
+	MaxUsers      int      `json:"max_users" validate:"gte=1"`
+	MaxStorageGB  int      `json:"max_storage_gb" validate:"gte=1"`
+	Features      []string `json:"features"`
+	IsActive      bool     `json:"is_active"`
+	IsDefault     bool     `json:"is_default"`
+	SortOrder     int      `json:"sort_order"`
+	Description   *string  `json:"description,omitempty"`
+	DescriptionAr *string  `json:"description_ar,omitempty"`
+}
+
+// UpdateSubscriptionPlanRequest for updating a plan
+type UpdateSubscriptionPlanRequest struct {
+	Name          *string  `json:"name,omitempty"`
+	NameAr        *string  `json:"name_ar,omitempty"`
+	PriceMonthly  *float64 `json:"price_monthly,omitempty"`
+	PriceYearly   *float64 `json:"price_yearly,omitempty"`
+	MaxUsers      *int     `json:"max_users,omitempty"`
+	MaxStorageGB  *int     `json:"max_storage_gb,omitempty"`
+	Features      []string `json:"features,omitempty"`
+	IsActive      *bool    `json:"is_active,omitempty"`
+	IsDefault     *bool    `json:"is_default,omitempty"`
+	SortOrder     *int     `json:"sort_order,omitempty"`
+	Description   *string  `json:"description,omitempty"`
+	DescriptionAr *string  `json:"description_ar,omitempty"`
+}
+
 // CreateOrganizationRequest for creating a new organization
 type CreateOrganizationRequest struct {
-	Name         string  `json:"name" validate:"required,min=2,max=255"`
-	NameAr       *string `json:"name_ar,omitempty"`
-	Domain       string  `json:"domain" validate:"required,fqdn"`
-	ContactEmail string  `json:"contact_email" validate:"required,email"`
-	ContactPhone *string `json:"contact_phone,omitempty"`
+	Name                 string     `json:"name" validate:"required,min=2,max=255"`
+	NameAr               *string    `json:"name_ar,omitempty"`
+	Domain               string     `json:"domain" validate:"required,fqdn"`
+	ContactEmail         string     `json:"contact_email" validate:"required,email"`
+	ContactPhone         *string    `json:"contact_phone,omitempty"`
+	SubscriptionPlanCode string     `json:"subscription_plan_code" validate:"required"`
+	SubscriptionStart    *time.Time `json:"subscription_start,omitempty"`
+	SubscriptionEnd      *time.Time `json:"subscription_end,omitempty"`
+}
+
+// UpdateOrganizationSubscriptionRequest for updating organization subscription details
+type UpdateOrganizationSubscriptionRequest struct {
+	SubscriptionPlanID string     `json:"subscription_plan_id" validate:"required,uuid"`
+	SubscriptionStart  *time.Time `json:"subscription_start,omitempty"`
+	SubscriptionEnd    *time.Time `json:"subscription_end,omitempty"`
+	SubscriptionStatus string     `json:"subscription_status" validate:"omitempty,oneof=active suspended cancelled expired"`
 }
 
 // VerifyDomainRequest for verifying domain ownership

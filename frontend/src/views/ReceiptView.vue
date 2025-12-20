@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
-import api from '@/api/client'
+import { receipts as receiptsApi } from '@/api'
 import html2canvas from 'html2canvas'
 import jsPDF from 'jspdf'
 
@@ -22,7 +22,7 @@ const orgInfo = {
 onMounted(async () => {
   try {
     const transactionId = route.params.id
-    const response = await api.get(`/receipts/${transactionId}`)
+    const response = await receiptsApi.get(transactionId)
     receiptData.value = response.data
     loading.value = false
   } catch (err) {

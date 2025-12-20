@@ -1,10 +1,28 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import api from '@/api/client'
+import { reports, transactions } from '@/api'
+import ToastNotification from '@/components/ToastNotification.vue'
 
 const loading = ref(false)
 const success = ref(false)
 const error = ref('')
+
+// Toast state
+const showToast = ref(false)
+const toastType = ref('success')
+const toastMessage = ref('')
+
+const showSuccessToast = (message) => {
+  toastType.value = 'success'
+  toastMessage.value = message
+  showToast.value = true
+}
+
+const showErrorToast = (message) => {
+  toastType.value = 'error'
+  toastMessage.value = message
+  showToast.value = true
+}
 
 const form = ref({
   type: 'income_grant',
@@ -25,7 +43,7 @@ const projects = ref([])
 
 onMounted(async () => {
   try {
-    const dailyPos = await api.get('/reports/daily-position')
+    const dailyPos = await reports.getDailyPosition()
     if (dailyPos.data) {
       const allContainers = [
         ...(dailyPos.data.cash_containers || []),
@@ -39,7 +57,7 @@ onMounted(async () => {
       }))
     }
 
-    const projectSum = await api.get('/reports/project-summary')
+    const projectSum = await reports.getProjectSummary()
     if (projectSum.data && Array.isArray(projectSum.data)) {
       projects.value = projectSum.data.map(p => ({
         id: p.id,
@@ -49,7 +67,7 @@ onMounted(async () => {
     }
   } catch (err) {
     console.error('Failed to load data:', err)
-    error.value = 'فشل في تحميل البيانات'
+    showErrorToast('فشل في تحميل البيانات')
   }
 })
 
@@ -64,8 +82,9 @@ const handleSubmit = async () => {
       ...form.value,
       description: form.value.description_ar || form.value.description
     }
-    const response = await api.post('/transactions', payload)
+    const response = await transactions.create(payload)
     success.value = true
+    showSuccessToast('تمت العملية بنجاح')
     
     // Open receipt in new tab
     if (response.data.transaction && response.data.transaction.id) {
@@ -76,6 +95,7 @@ const handleSubmit = async () => {
     resetForm()
   } catch (err) {
     error.value = err.response?.data?.error || 'فشل في إنشاء العملية'
+    showErrorToast(error.value)
   } finally {
     loading.value = false
   }
@@ -184,5 +204,13 @@ const resetForm = () => {
         </div>
       </form>
     </div>
+    
+    <!-- Toast Notification -->
+    <ToastNotification
+      v-model="showToast"
+      :type="toastType"
+      :message="toastMessage"
+      :duration="4000"
+    />
   </div>
 </template>

@@ -275,7 +275,7 @@ onMounted(() => {
                 <p class="font-medium text-blue-700 dark:text-blue-300 mb-2">💡 المتغيرات المتاحة:</p>
                 <div class="flex flex-wrap gap-2">
                   <code v-for="variable in selectedTemplate.variables" :key="variable" class="px-2 py-1 bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 rounded text-sm">
-                    {{ '{{' + variable + '}}' }}
+                    <span v-text="'{{' + variable + '}}'"></span>
                   </code>
                 </div>
               </div>

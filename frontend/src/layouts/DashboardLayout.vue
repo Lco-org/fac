@@ -33,6 +33,8 @@ const menuItems = computed(() => {
       children: [
         { title: 'المستخدمين', path: '/admin/users', icon: '👤' },
         { title: 'الحسابات المصرفية', path: '/admin/containers', icon: '🏦' },
+        { title: 'إدارة الفواتير', path: '/admin/invoices-management', icon: '🧾' },
+        { title: 'إدارة الإيصالات', path: '/admin/receipts-management', icon: '🎫' },
         { title: 'المشاريع', path: '/admin/projects', icon: '📁' },
         { title: 'الموظفين', path: '/admin/employees', icon: '👨‍💼' },
         { title: 'الأعضاء المنتسبين', path: '/admin/members', icon: '👥' },

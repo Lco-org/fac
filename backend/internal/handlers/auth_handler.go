@@ -171,13 +171,21 @@ func (h *AuthHandler) Login(c *fiber.Ctx) error {
 
 		// Lookup tenant by domain in MasterDB
 		var dbName string
+		var expiresAt *time.Time
 		lookupErr := h.masterDB.QueryRowContext(c.Context(), `
-			SELECT database_name FROM organizations 
+			SELECT database_name, subscription_expires_at FROM organizations 
 			WHERE (primary_domain = $1 OR id IN (SELECT organization_id FROM allowed_domains WHERE domain = $1))
 			AND status = 'active'
-		`, domain).Scan(&dbName)
+		`, domain).Scan(&dbName, &expiresAt)
 
 		if lookupErr == nil && dbName != "" {
+			// Check expiration
+			if expiresAt != nil && time.Now().After(*expiresAt) {
+				return c.Status(fiber.StatusPaymentRequired).JSON(fiber.Map{
+					"error": "Subscription expired. Please contact support.",
+				})
+			}
+
 			// Found tenant by email domain! Connect to it
 			tenantConfig := &config.DatabaseConfig{
 				Host:     h.cfg.Database.Host,
@@ -406,7 +414,23 @@ func (h *AuthHandler) GetCurrentUser(c *fiber.Ctx) error {
 		})
 	}
 
-	return c.JSON(user)
+	// Get features from tenant context
+	tenant := middleware.GetTenant(c)
+	features := []string{}
+	if tenant != nil {
+		features = tenant.Features
+	}
+
+	// embed user in a struct to Flatten the response (add features to user object)
+	type UserWithFeatures struct {
+		*models.User
+		OrganizationFeatures []string `json:"organization_features"`
+	}
+
+	return c.JSON(UserWithFeatures{
+		User:                 user,
+		OrganizationFeatures: features,
+	})
 }
 
 func (h *AuthHandler) RevokeAllSessions(c *fiber.Ctx) error {

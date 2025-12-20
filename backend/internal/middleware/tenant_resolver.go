@@ -4,6 +4,7 @@ import (
 	"cso-erp/internal/config"
 	"cso-erp/internal/database"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -19,6 +20,7 @@ type TenantContext struct {
 	OrganizationSlug string
 	DatabaseName     string
 	PrimaryDomain    string
+	Features         []string
 }
 
 // DBHolder wraps *database.DB WITHOUT implementing io.Closer
@@ -188,17 +190,20 @@ func (tr *TenantResolver) resolveByDomain(c *fiber.Ctx, host string) error {
 // getTenantBySlug looks up tenant by slug from master database
 func (tr *TenantResolver) getTenantBySlug(slug string) (*TenantContext, error) {
 	query := `
-		SELECT id, slug, database_name, primary_domain
-		FROM organizations
-		WHERE slug = $1 AND status = 'active'
+		SELECT o.id, o.slug, o.database_name, o.primary_domain, COALESCE(sp.features, '[]'::jsonb)
+		FROM organizations o
+		LEFT JOIN subscription_plans sp ON o.subscription_plan_id = sp.id
+		WHERE o.slug = $1 AND o.status = 'active'
 	`
 
 	var tenant TenantContext
+	var featuresJSON []byte
 	err := tr.masterDB.QueryRow(query, slug).Scan(
 		&tenant.OrganizationID,
 		&tenant.OrganizationSlug,
 		&tenant.DatabaseName,
 		&tenant.PrimaryDomain,
+		&featuresJSON,
 	)
 
 	if err == sql.ErrNoRows {
@@ -206,6 +211,14 @@ func (tr *TenantResolver) getTenantBySlug(slug string) (*TenantContext, error) {
 	}
 	if err != nil {
 		return nil, err
+	}
+
+	// Unmarshal features
+	if len(featuresJSON) > 0 {
+		if err := json.Unmarshal(featuresJSON, &tenant.Features); err != nil {
+			log.Printf("Failed to unmarshal tenant features: %v", err)
+			tenant.Features = []string{}
+		}
 	}
 
 	return &tenant, nil
@@ -214,19 +227,22 @@ func (tr *TenantResolver) getTenantBySlug(slug string) (*TenantContext, error) {
 // getTenantByDomain looks up tenant by domain from master database
 func (tr *TenantResolver) getTenantByDomain(domain string) (*TenantContext, error) {
 	query := `
-		SELECT o.id, o.slug, o.database_name, o.primary_domain
+		SELECT o.id, o.slug, o.database_name, o.primary_domain, COALESCE(sp.features, '[]'::jsonb)
 		FROM organizations o
 		LEFT JOIN allowed_domains ad ON o.id = ad.organization_id
+		LEFT JOIN subscription_plans sp ON o.subscription_plan_id = sp.id
 		WHERE (o.primary_domain = $1 OR ad.domain = $1) AND o.status = 'active'
 		LIMIT 1
 	`
 
 	var tenant TenantContext
+	var featuresJSON []byte
 	err := tr.masterDB.QueryRow(query, domain).Scan(
 		&tenant.OrganizationID,
 		&tenant.OrganizationSlug,
 		&tenant.DatabaseName,
 		&tenant.PrimaryDomain,
+		&featuresJSON,
 	)
 
 	if err == sql.ErrNoRows {
@@ -234,6 +250,14 @@ func (tr *TenantResolver) getTenantByDomain(domain string) (*TenantContext, erro
 	}
 	if err != nil {
 		return nil, err
+	}
+
+	// Unmarshal features
+	if len(featuresJSON) > 0 {
+		if err := json.Unmarshal(featuresJSON, &tenant.Features); err != nil {
+			log.Printf("Failed to unmarshal tenant features: %v", err)
+			tenant.Features = []string{}
+		}
 	}
 
 	return &tenant, nil
