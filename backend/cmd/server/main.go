@@ -128,6 +128,13 @@ func main() {
 	invoiceHandler := handlers.NewInvoiceHandler(invoiceService)
 	legalHandler := handlers.NewLegalHandler()
 
+	// Migration Service for SSA database updates
+	migrationService := services.NewMigrationService(masterDB)
+	migrationHandler := handlers.NewMigrationHandler(migrationService)
+
+	// Asset Handler (tenant-scoped)
+	assetHandler := handlers.NewAssetHandler()
+
 	app := fiber.New(fiber.Config{
 		AppName:      "CSO ERP System",
 		ErrorHandler: customErrorHandler,
@@ -260,6 +267,26 @@ func main() {
 	transactions.Get("/:id", middleware.RequireAnyAuthenticated(), transactionHandler.GetTransaction)
 	transactions.Post("/:id/reverse", middleware.RequireFinanceOrAdmin(), transactionHandler.ReverseTransaction)
 
+	// Asset Management Routes
+	assetCategories := protected.Group("/asset-categories")
+	assetCategories.Get("", assetHandler.ListCategories)
+	assetCategories.Post("", middleware.RequireRole(models.RoleAdmin), assetHandler.CreateCategory)
+	assetCategories.Put("/:id", middleware.RequireRole(models.RoleAdmin), assetHandler.UpdateCategory)
+	assetCategories.Delete("/:id", middleware.RequireRole(models.RoleAdmin), assetHandler.DeleteCategory)
+
+	assetTypes := protected.Group("/asset-types")
+	assetTypes.Get("", assetHandler.ListTypes)
+	assetTypes.Post("", middleware.RequireRole(models.RoleAdmin), assetHandler.CreateType)
+	assetTypes.Delete("/:id", middleware.RequireRole(models.RoleAdmin), assetHandler.DeleteType)
+
+	assets := protected.Group("/assets")
+	assets.Get("", assetHandler.ListAssets)
+	assets.Get("/inventory", assetHandler.GetInventorySummary)
+	assets.Get("/:id", assetHandler.GetAsset)
+	assets.Post("", middleware.RequireFinanceOrAdmin(), assetHandler.CreateAsset)
+	assets.Put("/:id", middleware.RequireFinanceOrAdmin(), assetHandler.UpdateAsset)
+	assets.Delete("/:id", middleware.RequireRole(models.RoleAdmin), assetHandler.DeleteAsset)
+
 	transfers := protected.Group("/transfers")
 	transfers.Post("/", middleware.RequireFinanceOrAdmin(), transferHandler.CreateTransfer)
 
@@ -333,6 +360,11 @@ func main() {
 	ssaAuth.Post("/verify-2fa", ssaAuthHandler.Verify2FA)
 	ssaAuth.Post("/logout", ssaAuthHandler.Logout)
 
+	// SSA Registration Handler - For first-time setup only
+	ssaRegistrationHandler := handlers.NewSSARegistrationHandler(ssaAuthService, cfg)
+	ssaAuth.Post("/register", ssaRegistrationHandler.Register)
+	ssaAuth.Get("/registration-status", ssaRegistrationHandler.CheckRegistrationAvailable)
+
 	// SSA API Routes - Protected by Super Admin middleware
 	ssa := api.Group("/ssa",
 		middleware.AuthMiddleware(&cfg.JWT),
@@ -377,6 +409,10 @@ func main() {
 	// Organization Deletion (with OTP verification)
 	ssa.Post("/organizations/:id/request-deletion", tenantHandler.RequestDeletion)
 	ssa.Post("/organizations/:id/confirm-deletion", tenantHandler.ConfirmDeletion)
+
+	// Database Migrations
+	ssa.Get("/migrations/status", migrationHandler.GetMigrationStatus)
+	ssa.Post("/migrations/run", migrationHandler.RunMigrations)
 
 	log.Printf("🔐 SSA Routes configured at /api/v1/ssa/*")
 

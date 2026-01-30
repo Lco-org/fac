@@ -149,6 +149,7 @@ func (s *NotificationService) getExpiringMembers(ctx context.Context, daysAhead 
 				FROM notifications
 				WHERE type = 'expiry_warning'
 					AND created_at > CURRENT_DATE - INTERVAL '7 days'
+					AND details->>'member_id' IS NOT NULL
 			)
 		ORDER BY m.valid_until ASC
 	`
@@ -175,14 +176,15 @@ func (s *NotificationService) getExpiringMembers(ctx context.Context, daysAhead 
 func (s *NotificationService) createNotification(ctx context.Context, member ExpiringMember) error {
 	title := fmt.Sprintf("تنبيه: انتهاء عضوية %s", member.Name)
 	message := fmt.Sprintf("ستنتهي عضوية %s خلال %d يوم", member.Name, member.DaysUntil)
+	details := fmt.Sprintf(`{"member_id": "%s"}`, member.ID.String())
 
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO notifications (id, user_id, type, title, message, is_read, created_at)
-		SELECT $1, u.id, $2, $3, $4, false, $5
+		INSERT INTO notifications (id, user_id, type, title, message, details, is_read, created_at)
+		SELECT $1, u.id, $2, $3, $4, $5::jsonb, false, $6
 		FROM users u 
 		WHERE u.role = 'admin'
 		LIMIT 1
-	`, uuid.New(), "expiry_warning", title, message, time.Now())
+	`, uuid.New(), "expiry_warning", title, message, details, time.Now())
 
 	return err
 }

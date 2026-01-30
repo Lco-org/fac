@@ -18,6 +18,12 @@ const organizations = ref([])
 const statusFilter = ref('')
 const searchQuery = ref('')
 
+// Migrations State
+const migrationsLoading = ref(false)
+const migrationsStatus = ref([])
+const migrationResult = ref(null)
+const showMigrationsPanel = ref(false)
+
 // API Base URL
 const API_BASE = '/api/v1/ssa'
 
@@ -108,6 +114,50 @@ const formatDate = (dateStr) => {
     month: 'short', 
     day: 'numeric' 
   })
+}
+
+// Fetch migrations status
+const fetchMigrations = async () => {
+  migrationsLoading.value = true
+  const token = localStorage.getItem('ssa_token')
+  try {
+    const res = await fetch(`${API_BASE}/migrations/status`, {
+      credentials: 'include',
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    if (res.ok) {
+      const data = await res.json()
+      migrationsStatus.value = data.databases || []
+    }
+  } catch (err) {
+    console.error('Failed to fetch migrations:', err)
+  } finally {
+    migrationsLoading.value = false
+  }
+}
+
+// Run migrations on all databases
+const runMigrations = async () => {
+  if (!confirm('هل تريد تحديث جميع قواعد البيانات؟ تأكد من وجود نسخة احتياطية.')) return
+  
+  migrationsLoading.value = true
+  migrationResult.value = null
+  const token = localStorage.getItem('ssa_token')
+  
+  try {
+    const res = await fetch(`${API_BASE}/migrations/run`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    const data = await res.json()
+    migrationResult.value = data
+    await fetchMigrations()
+  } catch (err) {
+    migrationResult.value = { success: false, error: err.message }
+  } finally {
+    migrationsLoading.value = false
+  }
 }
 
 onMounted(() => {
@@ -332,6 +382,77 @@ onMounted(() => {
               </tr>
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- Database Migrations Panel -->
+      <div class="mt-8 bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700 overflow-hidden">
+        <div class="p-6 border-b border-gray-100 dark:border-gray-700">
+          <div class="flex items-center justify-between">
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <span>🔄</span>
+              تحديث قواعد البيانات
+            </h2>
+            <div class="flex gap-3">
+              <button 
+                @click="fetchMigrations"
+                :disabled="migrationsLoading"
+                class="px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              >
+                <span v-if="migrationsLoading">⏳</span>
+                <span v-else>🔍</span>
+                فحص الحالة
+              </button>
+              <button 
+                @click="runMigrations"
+                :disabled="migrationsLoading"
+                class="px-6 py-2 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-lg hover:shadow-lg transition-all font-medium flex items-center gap-2"
+              >
+                <span v-if="migrationsLoading" class="animate-spin">⏳</span>
+                <span v-else>🚀</span>
+                تشغيل التحديثات
+              </button>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Migration Result -->
+        <div v-if="migrationResult" class="p-4 border-b border-gray-100 dark:border-gray-700" :class="migrationResult.success ? 'bg-green-50 dark:bg-green-900/20' : 'bg-red-50 dark:bg-red-900/20'">
+          <div class="flex items-center gap-2">
+            <span :class="migrationResult.success ? 'text-green-600' : 'text-red-600'">{{ migrationResult.success ? '✅' : '❌' }}</span>
+            <span :class="migrationResult.success ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'">
+              {{ migrationResult.success ? `تم تحديث ${migrationResult.updated_databases} قاعدة بيانات بنجاح` : 'فشل في التحديث' }}
+            </span>
+          </div>
+        </div>
+        
+        <!-- Migrations Status Table -->
+        <div v-if="migrationsStatus.length > 0" class="overflow-x-auto">
+          <table class="w-full">
+            <thead class="bg-gray-50 dark:bg-gray-900">
+              <tr>
+                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase">قاعدة البيانات</th>
+                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase">المنظمة</th>
+                <th class="px-6 py-3 text-right text-xs font-semibold text-gray-500 uppercase">تحديثات معلقة</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+              <tr v-for="db in migrationsStatus" :key="db.database_name" class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                <td class="px-6 py-4">
+                  <code class="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-sm font-mono">{{ db.database_name }}</code>
+                </td>
+                <td class="px-6 py-4 text-gray-700 dark:text-gray-300">{{ db.organization_name }}</td>
+                <td class="px-6 py-4">
+                  <span v-if="db.pending_migrations === 0" class="text-green-600">✅ محدّث</span>
+                  <span v-else class="px-2 py-1 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 rounded-full text-sm">{{ db.pending_migrations }} تحديث</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        
+        <div v-else class="p-8 text-center text-gray-500 dark:text-gray-400">
+          <p>اضغط "فحص الحالة" لعرض حالة قواعد البيانات</p>
         </div>
       </div>
 

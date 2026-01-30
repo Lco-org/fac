@@ -21,7 +21,7 @@ func NewTransactionService(db *database.DB) *TransactionService {
 }
 
 func (s *TransactionService) CreateTransaction(ctx context.Context, req *models.CreateTransactionRequest, userID uuid.UUID) (*models.TransactionResponse, error) {
-	if req.Amount <= 0 {
+	if req.Amount < 0 {
 		return nil, ErrInvalidAmount
 	}
 

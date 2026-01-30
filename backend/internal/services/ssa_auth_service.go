@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -424,4 +425,62 @@ func maskEmail(email string) string {
 		return "***" + email[atIndex:]
 	}
 	return email[:2] + "***" + email[atIndex:]
+}
+
+// CreateAdminRequest for creating new SSA admin
+type CreateAdminRequest struct {
+	Username string `json:"username" validate:"required"`
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,min=8"`
+	FullName string `json:"full_name" validate:"required"`
+}
+
+// CountAdmins returns the count of SSA admins in the database
+func (s *SSAAuthService) CountAdmins(ctx context.Context) (int, error) {
+	var count int
+	err := s.masterDB.QueryRowContext(ctx, "SELECT COUNT(*) FROM super_system_admins").Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+// CreateAdmin creates a new Super System Admin account
+func (s *SSAAuthService) CreateAdmin(ctx context.Context, req *CreateAdminRequest) (*models.SuperSystemAdmin, error) {
+	// Hash password using Argon2id
+	passwordHash, err := security.HashPassword(req.Password, nil)
+	if err != nil {
+		return nil, fmt.Errorf("فشل تشفير كلمة المرور: %w", err)
+	}
+
+	// Insert new admin
+	query := `
+		INSERT INTO super_system_admins (
+			id, username, email, password_hash, full_name, 
+			is_active, two_factor_enabled, created_at, updated_at
+		) VALUES (
+			gen_random_uuid(), $1, $2, $3, $4, 
+			true, false, NOW(), NOW()
+		)
+		RETURNING id, username, email, full_name, is_active, two_factor_enabled, created_at, updated_at
+	`
+
+	var admin models.SuperSystemAdmin
+	err = s.masterDB.QueryRowContext(ctx, query,
+		req.Username, req.Email, passwordHash, req.FullName,
+	).Scan(
+		&admin.ID, &admin.Username, &admin.Email, &admin.FullName,
+		&admin.IsActive, &admin.TwoFactorEnabled, &admin.CreatedAt, &admin.UpdatedAt,
+	)
+
+	if err != nil {
+		// Check for unique constraint violations
+		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
+			return nil, fmt.Errorf("اسم المستخدم أو البريد الإلكتروني مستخدم بالفعل")
+		}
+		return nil, fmt.Errorf("فشل إنشاء الحساب: %w", err)
+	}
+
+	log.Printf("Created new SSA admin: %s (%s)", admin.Username, admin.Email)
+	return &admin, nil
 }

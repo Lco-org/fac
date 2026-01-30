@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS organizations (
     -- Subscription (toggleable feature)
     subscription_plan_id UUID,
     subscription_status VARCHAR(50) DEFAULT 'trial', -- trial, active, expired, cancelled
+    subscription_start_date TIMESTAMP,
     subscription_expires_at TIMESTAMP,
     
     -- Metadata
@@ -85,8 +86,8 @@ CREATE TABLE IF NOT EXISTS domain_verifications (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     
-    email VARCHAR(255) NOT NULL,
-    hash_code VARCHAR(64) NOT NULL,
+    email VARCHAR(255), -- Nullable
+    code_hash VARCHAR(255) NOT NULL,
     
     -- Expiry: 5 minutes
     expires_at TIMESTAMP NOT NULL,
@@ -107,7 +108,28 @@ CREATE TABLE IF NOT EXISTS domain_verifications (
 -- Indexes for domain_verifications
 CREATE INDEX IF NOT EXISTS idx_domain_verifications_org ON domain_verifications(organization_id);
 CREATE INDEX IF NOT EXISTS idx_domain_verifications_expires ON domain_verifications(expires_at);
-CREATE INDEX IF NOT EXISTS idx_domain_verifications_code ON domain_verifications(hash_code);
+CREATE INDEX IF NOT EXISTS idx_domain_verifications_code ON domain_verifications(code_hash);
+
+-- =====================================================
+-- 3.b ORGANIZATION DELETION REQUESTS (طلبات حذف المنظمات)
+-- =====================================================
+CREATE TABLE IF NOT EXISTS org_deletion_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    organization_id UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    admin_id UUID,
+    
+    email VARCHAR(255), -- Nullable as code doesn't always insert it
+    code_hash VARCHAR(255) NOT NULL,
+    expires_at TIMESTAMP NOT NULL,
+    
+    attempts INT DEFAULT 0,
+    max_attempts INT DEFAULT 3,
+    
+    request_ip INET,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_org_deletion_org ON org_deletion_requests(organization_id);
 
 -- =====================================================
 -- 4. SUPER ADMIN AUDIT LOG (سجل عمليات المدير الأعلى)

@@ -228,6 +228,13 @@ const routes = [
         component: () => import('@/views/ssa/SSALoginView.vue'),
         meta: { title: 'تسجيل دخول المشرف الأعلى' },
     },
+    // SSA Registration - First-time setup only
+    {
+        path: '/b8fb17/ssa/register',
+        name: 'SSARegister',
+        component: () => import('@/views/ssa/SSARegisterView.vue'),
+        meta: { title: 'إنشاء حساب المشرف الأعلى' },
+    },
     {
         path: '/b8fb17/ssa',
         component: () => import('@/views/ssa/SuperAdminDashboardView.vue'),

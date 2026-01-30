@@ -42,11 +42,13 @@ func (h *TransactionHandler) CreateTransaction(c *fiber.Ctx) error {
 		})
 	}
 
-	if req.Amount <= 0 {
+	if req.Amount < 0 {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Amount must be greater than 0",
+			"error": "المبلغ لا يمكن أن يكون سالباً",
 		})
 	}
+	// Allow Amount = 0 for asset-only transactions (donations/grants in-kind)
+	// Future: check len(req.Assets) > 0 when assets are included in transaction request
 	if req.ContainerID == uuid.Nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Container ID is required",

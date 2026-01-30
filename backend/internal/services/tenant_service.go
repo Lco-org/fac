@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
 	"encoding/json"
@@ -44,6 +45,28 @@ func (s *TenantService) CreateOrganization(ctx context.Context, req *models.Crea
 
 	// Generate database name
 	dbName := fmt.Sprintf("%s%s_erp", s.cfg.MultiTenant.TenantDBPrefix, slug)
+
+	// Strict Domain Validation Logic
+	emailParts := strings.Split(req.ContactEmail, "@")
+	if len(emailParts) != 2 {
+		return nil, fmt.Errorf("invalid contact email format")
+	}
+	emailDomain := strings.ToLower(emailParts[1])
+	siteDomain := strings.ToLower(req.Domain)
+
+	// Determine matching strategy
+	var allowedDomains []string
+	if emailDomain == siteDomain {
+		// Scenario 1: Exact Match (e.g. admin@ctf.com.ly matches ctf.com.ly)
+		allowedDomains = []string{siteDomain}
+	} else if strings.HasSuffix(emailDomain, "."+siteDomain) {
+		// Scenario 2: Subdomain Match (e.g. admin@mm.ctf.com.ly matches ctf.com.ly)
+		// Add BOTH site domain (root) and email domain (proven subdomain)
+		allowedDomains = []string{siteDomain, emailDomain}
+	} else {
+		// Scenario 3: No Match (REJECT)
+		return nil, fmt.Errorf("security violation: admin email domain (%s) must belong to the organization domain (%s)", emailDomain, siteDomain)
+	}
 
 	// Check if domain already exists
 	var exists bool
@@ -125,13 +148,20 @@ func (s *TenantService) CreateOrganization(ctx context.Context, req *models.Crea
 		return nil, fmt.Errorf("failed to create organization: %w", err)
 	}
 
-	// Insert into allowed_domains
-	_, err = s.masterDB.ExecContext(ctx, `
-		INSERT INTO allowed_domains (id, organization_id, domain, is_primary, is_active)
-		VALUES ($1, $2, $3, true, true)
-	`, uuid.New(), org.ID, req.Domain)
-	if err != nil {
-		return nil, fmt.Errorf("failed to add domain: %w", err)
+	// Insert allowed domains
+	for _, domain := range allowedDomains {
+		isPrimary := (domain == siteDomain)
+		// Logic: if site domain is inserted, it's primary.
+		// If subdomain is inserted, it's secondary (is_primary=false).
+		// Wait, loop:
+
+		_, err = s.masterDB.ExecContext(ctx, `
+			INSERT INTO allowed_domains (id, organization_id, domain, is_primary, is_active, verified, verified_at, verification_method)
+			VALUES ($1, $2, $3, $4, true, true, $5, 'admin_email_proof')
+		`, uuid.New(), org.ID, domain, isPrimary, now)
+		if err != nil {
+			return nil, fmt.Errorf("failed to add domain %s: %w", domain, err)
+		}
 	}
 
 	return org, nil
@@ -153,7 +183,7 @@ func (s *TenantService) GenerateVerificationCode(ctx context.Context, orgID uuid
 	// Insert new verification record
 	_, err := s.masterDB.ExecContext(ctx, `
 		INSERT INTO domain_verifications (
-			id, organization_id, email, hash_code, expires_at, request_ip
+			id, organization_id, email, code_hash, expires_at, request_ip
 		) VALUES ($1, $2, $3, $4, $5, $6)
 	`, uuid.New(), orgID, email, hashedCode, expiresAt, requestIP)
 	if err != nil {
@@ -169,7 +199,7 @@ func (s *TenantService) VerifyCode(ctx context.Context, orgID uuid.UUID, code st
 
 	var verification models.DomainVerification
 	err := s.masterDB.QueryRowContext(ctx, `
-		SELECT id, organization_id, email, hash_code, expires_at, verified, attempts, max_attempts
+		SELECT id, organization_id, email, code_hash, expires_at, verified, attempts, max_attempts
 		FROM domain_verifications
 		WHERE organization_id = $1 AND verified = false
 		ORDER BY created_at DESC
@@ -860,11 +890,10 @@ func generateRandomPassword(length int) string {
 	return string(b)
 }
 
-// hashVerificationCode hashes the verification code
+// hashVerificationCode hashes the verification code using SHA256
 func hashVerificationCode(code string) string {
-	hash := make([]byte, 32)
-	copy(hash, []byte(code))
-	return hex.EncodeToString(hash)
+	hash := sha256.Sum256([]byte(code))
+	return hex.EncodeToString(hash[:])
 }
 
 // sanitizeDBName sanitizes database name for SQL
@@ -918,9 +947,9 @@ func (s *TenantService) RequestOrganizationDeletion(ctx context.Context, orgID, 
 	// Insert deletion request
 	_, err = s.masterDB.ExecContext(ctx, `
 		INSERT INTO org_deletion_requests (
-			id, organization_id, admin_id, code_hash, expires_at, request_ip
+			id, organization_id, email, code_hash, expires_at, request_ip
 		) VALUES ($1, $2, $3, $4, $5, $6)
-	`, requestID, orgID, adminID, hashedCode, expiresAt, requestIP)
+	`, requestID, orgID, adminEmail, hashedCode, expiresAt, requestIP)
 	if err != nil {
 		return nil, fmt.Errorf("فشل في إنشاء طلب الحذف: %w", err)
 	}

@@ -6,6 +6,7 @@ import (
 	"cso-erp/internal/models"
 	"cso-erp/internal/services"
 	"fmt"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -347,14 +348,20 @@ func (h *EmailTemplateHandler) TestSMTPSettings(c *fiber.Ctx) error {
 	id, err := uuid.Parse(idStr)
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid SMTP settings ID",
+			"error":        "Invalid SMTP settings ID",
+			"error_ar":     "معرف الإعدادات غير صالح",
+			"error_type":   "INVALID_ID",
+			"test_success": false,
 		})
 	}
 
 	var req models.TestSMTPRequest
 	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid request body",
+			"error":        "Invalid request body",
+			"error_ar":     "بيانات الطلب غير صالحة",
+			"error_type":   "INVALID_REQUEST",
+			"test_success": false,
 		})
 	}
 
@@ -362,7 +369,10 @@ func (h *EmailTemplateHandler) TestSMTPSettings(c *fiber.Ctx) error {
 	settings, err := smtpService.GetSMTPSettingsByID(c.Context(), id)
 	if err != nil || settings == nil {
 		return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
-			"error": "SMTP settings not found",
+			"error":        "SMTP settings not found",
+			"error_ar":     "لم يتم العثور على إعدادات SMTP",
+			"error_type":   "NOT_FOUND",
+			"test_success": false,
 		})
 	}
 
@@ -370,7 +380,10 @@ func (h *EmailTemplateHandler) TestSMTPSettings(c *fiber.Ctx) error {
 	password, err := smtpService.GetDecryptedPassword(c.Context(), id)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to retrieve SMTP password",
+			"error":        "Failed to retrieve SMTP password",
+			"error_ar":     "فشل في استرجاع كلمة مرور SMTP",
+			"error_type":   "PASSWORD_ERROR",
+			"test_success": false,
 		})
 	}
 
@@ -393,24 +406,90 @@ func (h *EmailTemplateHandler) TestSMTPSettings(c *fiber.Ctx) error {
 	tempEmailService := services.NewEmailServiceWithTenantConfig(tenantConfig)
 	if tempEmailService == nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"error": "Invalid SMTP configuration",
+			"error":        "Invalid SMTP configuration",
+			"error_ar":     "إعدادات SMTP غير صالحة - تحقق من عنوان البريد الإلكتروني",
+			"error_type":   "INVALID_CONFIG",
+			"test_success": false,
 		})
 	}
 
 	// Send test email
-	subject := "Test Email - CSO ERP SMTP Settings"
-	body := fmt.Sprintf("<h1>SMTP Test</h1><p>This is a test email to verify SMTP settings for %s.</p>", settings.SMTPHost)
+	subject := "اختبار إعدادات البريد - CSO ERP"
+	body := fmt.Sprintf(`<html dir="rtl"><body style="font-family: Arial; direction: rtl;">
+		<h1 style="color: #22c55e;">✅ تم الاختبار بنجاح!</h1>
+		<p>تم إرسال هذه الرسالة للتحقق من إعدادات SMTP.</p>
+		<table style="border-collapse: collapse; margin-top: 20px;">
+			<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>السيرفر:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">%s</td></tr>
+			<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>المنفذ:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">%d</td></tr>
+			<tr><td style="padding: 8px; border: 1px solid #ddd;"><strong>المرسل:</strong></td><td style="padding: 8px; border: 1px solid #ddd;">%s</td></tr>
+		</table>
+	</body></html>`, settings.SMTPHost, settings.SMTPPort, settings.FromAddress)
 
 	err = tempEmailService.SendEmail(c.Context(), req.ToEmail, subject, body, true)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error":   "Failed to send test email: " + err.Error(),
-			"details": err.Error(),
+		errMsg := err.Error()
+		errorType := "UNKNOWN"
+		errorAr := "خطأ غير معروف"
+		suggestion := ""
+
+		// Categorize errors with Arabic explanations
+		switch {
+		case strings.Contains(errMsg, "no such host") || strings.Contains(errMsg, "lookup"):
+			errorType = "DNS_ERROR"
+			errorAr = "خطأ في اسم السيرفر"
+			suggestion = "تحقق من صحة اسم السيرفر (SMTP Host)"
+		case strings.Contains(errMsg, "connection refused"):
+			errorType = "CONNECTION_REFUSED"
+			errorAr = "تم رفض الاتصال"
+			suggestion = "تحقق من رقم المنفذ - جرب 465 أو 587"
+		case strings.Contains(errMsg, "timeout") || strings.Contains(errMsg, "deadline exceeded"):
+			errorType = "TIMEOUT"
+			errorAr = "انتهت مهلة الاتصال"
+			suggestion = "السيرفر لا يستجيب - تحقق من إعدادات الشبكة"
+		case strings.Contains(errMsg, "535") || strings.Contains(errMsg, "Incorrect authentication"):
+			errorType = "AUTH_ERROR"
+			errorAr = "كلمة المرور خاطئة"
+			suggestion = "تحقق من كلمة المرور - قد تحتاج لإنشاء كلمة مرور تطبيق"
+		case strings.Contains(errMsg, "closed network") || strings.Contains(errMsg, "use of closed"):
+			errorType = "CONNECTION_CLOSED"
+			errorAr = "انقطع الاتصال بالسيرفر"
+			suggestion = "السيرفر أغلق الاتصال - تحقق من بيانات الدخول أو جرب منفذ مختلف"
+		case strings.Contains(errMsg, "authentication") || strings.Contains(errMsg, "auth"):
+			errorType = "AUTH_ERROR"
+			errorAr = "فشل تسجيل الدخول"
+			suggestion = "تحقق من اسم المستخدم وكلمة المرور"
+		case strings.Contains(errMsg, "TLS") || strings.Contains(errMsg, "certificate") || strings.Contains(errMsg, "STARTTLS"):
+			errorType = "TLS_ERROR"
+			errorAr = "خطأ في التشفير"
+			suggestion = "جرب تغيير المنفذ: استخدم 465 مع SSL أو 587 مع TLS"
+		case strings.Contains(errMsg, "relay") || strings.Contains(errMsg, "550") || strings.Contains(errMsg, "553"):
+			errorType = "RELAY_ERROR"
+			errorAr = "السيرفر لا يسمح بالإرسال"
+			suggestion = "تحقق من صلاحيات حساب البريد"
+		case strings.Contains(errMsg, "EOF") || strings.Contains(errMsg, "broken pipe"):
+			errorType = "CONNECTION_LOST"
+			errorAr = "فقد الاتصال بالسيرفر"
+			suggestion = "حدثت مشكلة في الاتصال - أعد المحاولة"
+		default:
+			// For unknown errors, show the actual error message
+			errorAr = "خطأ: " + errMsg
+			suggestion = "راجع إعدادات SMTP أو تواصل مع مزود البريد"
+		}
+
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":        errMsg,
+			"error_ar":     errorAr,
+			"error_type":   errorType,
+			"suggestion":   suggestion,
+			"test_success": false,
+			"smtp_host":    settings.SMTPHost,
+			"smtp_port":    settings.SMTPPort,
 		})
 	}
 
 	return c.JSON(fiber.Map{
 		"message":      "Test email sent successfully",
+		"message_ar":   "تم إرسال البريد التجريبي بنجاح ✅",
 		"smtp_host":    settings.SMTPHost,
 		"smtp_port":    settings.SMTPPort,
 		"to_email":     req.ToEmail,

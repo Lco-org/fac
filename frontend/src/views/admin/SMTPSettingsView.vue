@@ -139,12 +139,17 @@ const openTestModal = (id) => {
   showTestModal.value = true
 }
 
+// Test result state for detailed feedback
+const testResult = ref(null)
+
 // Send test email
 const sendTestEmail = async () => {
   if (!testEmail.value) return
   
   testing.value = true
   error.value = null
+  success.value = null
+  testResult.value = null
   
   try {
     const response = await fetch(`${API_BASE}/smtp-settings/${testingId.value}/test`, {
@@ -154,12 +159,37 @@ const sendTestEmail = async () => {
       body: JSON.stringify({ to_email: testEmail.value })
     })
     
-    if (!response.ok) throw new Error('فشل إرسال الاختبار')
+    const data = await response.json()
     
-    success.value = `تم إرسال رسالة اختبار إلى ${testEmail.value}`
-    showTestModal.value = false
+    if (!response.ok || !data.test_success) {
+      // Show detailed error with suggestion
+      testResult.value = {
+        success: false,
+        error: data.error_ar || data.error || 'فشل الاختبار',
+        suggestion: data.suggestion || '',
+        errorType: data.error_type || 'UNKNOWN',
+        host: data.smtp_host,
+        port: data.smtp_port
+      }
+      error.value = testResult.value.error
+      if (testResult.value.suggestion) {
+        error.value += '\n💡 ' + testResult.value.suggestion
+      }
+    } else {
+      // Success
+      testResult.value = {
+        success: true,
+        message: data.message_ar || 'تم الإرسال بنجاح',
+        host: data.smtp_host,
+        port: data.smtp_port,
+        toEmail: data.to_email
+      }
+      success.value = testResult.value.message
+      showTestModal.value = false
+    }
   } catch (err) {
-    error.value = err.message
+    error.value = 'خطأ في الاتصال بالسيرفر'
+    testResult.value = { success: false, error: err.message }
   } finally {
     testing.value = false
   }
@@ -362,6 +392,41 @@ onMounted(() => {
               dir="ltr"
               placeholder="test@example.com"
             />
+            
+            <!-- Test Result Display -->
+            <div v-if="testResult" class="mb-4">
+              <!-- Success -->
+              <div v-if="testResult.success" class="p-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-xl">
+                <div class="flex items-center gap-2 text-green-700 dark:text-green-300">
+                  <span class="text-2xl">✅</span>
+                  <span class="font-bold">{{ testResult.message }}</span>
+                </div>
+                <p class="text-green-600 dark:text-green-400 text-sm mt-2">
+                  تم إرسال الرسالة إلى {{ testResult.toEmail }}
+                </p>
+              </div>
+              
+              <!-- Error -->
+              <div v-else class="p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-xl">
+                <div class="flex items-center gap-2 text-red-700 dark:text-red-300">
+                  <span class="text-2xl">❌</span>
+                  <span class="font-bold">{{ testResult.error }}</span>
+                </div>
+                <div v-if="testResult.suggestion" class="mt-3 p-3 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-lg">
+                  <div class="flex items-start gap-2 text-amber-700 dark:text-amber-300">
+                    <span class="text-xl">💡</span>
+                    <div>
+                      <p class="font-medium">اقتراح:</p>
+                      <p class="text-sm">{{ testResult.suggestion }}</p>
+                    </div>
+                  </div>
+                </div>
+                <div v-if="testResult.host" class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                  السيرفر: {{ testResult.host }}:{{ testResult.port }}
+                </div>
+              </div>
+            </div>
+            
             <div class="flex gap-3">
               <button 
                 @click="sendTestEmail" 
@@ -371,7 +436,7 @@ onMounted(() => {
                 {{ testing ? 'جاري الإرسال...' : '📤 إرسال' }}
               </button>
               <button 
-                @click="showTestModal = false" 
+                @click="showTestModal = false; testResult = null" 
                 class="px-6 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-bold"
               >
                 إلغاء
